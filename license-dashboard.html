@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>kit naka — License Status</title>
+<style>
+  :root{
+    --bg:#0B0E11;
+    --panel:#12161B;
+    --line:#1E242B;
+    --text:#D8DEE4;
+    --dim:#6B7580;
+    --ok:#4FD1C5;
+    --bad:#E5484D;
+    --warn:#F5A623;
+    --mono: 'JetBrains Mono', 'SF Mono', 'Consolas', monospace;
+    --sans: 'Inter', -apple-system, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--sans);
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:24px;
+  }
+  .board{
+    width:100%;
+    max-width:560px;
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:10px;
+    overflow:hidden;
+  }
+  .board-head{
+    padding:20px 24px;
+    border-bottom:1px solid var(--line);
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+  }
+  .board-head h1{
+    font-size:14px;
+    font-weight:600;
+    letter-spacing:0.02em;
+    margin:0;
+    color:var(--text);
+  }
+  .board-head .sub{
+    font-family:var(--mono);
+    font-size:11px;
+    color:var(--dim);
+    margin-top:4px;
+  }
+  .pulse{
+    width:8px;height:8px;border-radius:50%;
+    background:var(--dim);
+    flex-shrink:0;
+  }
+  .pulse.ok{background:var(--ok); box-shadow:0 0 0 0 rgba(79,209,197,0.5); animation:pulse-ok 2s infinite;}
+  .pulse.bad{background:var(--bad); box-shadow:0 0 0 0 rgba(229,72,77,0.5); animation:pulse-bad 2s infinite;}
+  .pulse.warn{background:var(--warn); box-shadow:0 0 0 0 rgba(245,166,35,0.5); animation:pulse-warn 2s infinite;}
+  @keyframes pulse-ok{0%{box-shadow:0 0 0 0 rgba(79,209,197,0.45);}70%{box-shadow:0 0 0 8px rgba(79,209,197,0);}100%{box-shadow:0 0 0 0 rgba(79,209,197,0);}}
+  @keyframes pulse-bad{0%{box-shadow:0 0 0 0 rgba(229,72,77,0.45);}70%{box-shadow:0 0 0 8px rgba(229,72,77,0);}100%{box-shadow:0 0 0 0 rgba(229,72,77,0);}}
+  @keyframes pulse-warn{0%{box-shadow:0 0 0 0 rgba(245,166,35,0.45);}70%{box-shadow:0 0 0 8px rgba(245,166,35,0);}100%{box-shadow:0 0 0 0 rgba(245,166,35,0);}}
+
+  .status-zone{
+    padding:32px 24px 24px;
+    text-align:center;
+    border-bottom:1px solid var(--line);
+  }
+  .status-word{
+    font-family:var(--mono);
+    font-size:32px;
+    font-weight:700;
+    letter-spacing:-0.01em;
+    margin:0;
+  }
+  .status-word.ok{color:var(--ok);}
+  .status-word.bad{color:var(--bad);}
+  .status-word.warn{color:var(--warn);}
+  .status-word.idle{color:var(--dim);}
+  .status-detail{
+    font-size:13px;
+    color:var(--dim);
+    margin-top:8px;
+  }
+
+  .fields{
+    padding:20px 24px;
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:12px;
+    border-bottom:1px solid var(--line);
+  }
+  .field{grid-column:span 1;}
+  .field.full{grid-column:span 2;}
+  .field label{
+    display:block;
+    font-size:11px;
+    color:var(--dim);
+    margin-bottom:6px;
+    text-transform:uppercase;
+    letter-spacing:0.04em;
+  }
+  .field input{
+    width:100%;
+    background:var(--bg);
+    border:1px solid var(--line);
+    border-radius:6px;
+    padding:9px 10px;
+    color:var(--text);
+    font-family:var(--mono);
+    font-size:13px;
+  }
+  .field input:focus{outline:1px solid var(--ok); border-color:var(--ok);}
+
+  .actions{
+    padding:20px 24px;
+    display:flex;
+    gap:10px;
+    align-items:center;
+    border-bottom:1px solid var(--line);
+  }
+  button{
+    font-family:var(--sans);
+    font-size:13px;
+    font-weight:600;
+    padding:10px 18px;
+    border-radius:6px;
+    border:1px solid var(--line);
+    background:var(--ok);
+    color:#06201D;
+    cursor:pointer;
+  }
+  button:disabled{opacity:0.5; cursor:default;}
+  .last-check{
+    font-family:var(--mono);
+    font-size:11px;
+    color:var(--dim);
+  }
+
+  .raw{
+    padding:20px 24px;
+  }
+  .raw label{
+    font-size:11px;
+    color:var(--dim);
+    text-transform:uppercase;
+    letter-spacing:0.04em;
+    display:block;
+    margin-bottom:8px;
+  }
+  pre{
+    margin:0;
+    font-family:var(--mono);
+    font-size:12px;
+    line-height:1.6;
+    color:var(--text);
+    background:var(--bg);
+    border:1px solid var(--line);
+    border-radius:6px;
+    padding:12px;
+    white-space:pre-wrap;
+    word-break:break-all;
+    max-height:200px;
+    overflow-y:auto;
+  }
+  .empty{color:var(--dim); font-style:italic;}
+
+  @media (prefers-reduced-motion: reduce){
+    .pulse.ok,.pulse.bad,.pulse.warn{animation:none;}
+  }
+</style>
+</head>
+<body>
+
+<div class="board">
+  <div class="board-head">
+    <div>
+      <h1>kit naka — License Monitor</h1>
+      <div class="sub" id="urlLabel">kitnaka-license-api.vercel.app/verify</div>
+    </div>
+    <div class="pulse idle" id="pulseDot"></div>
+  </div>
+
+  <div class="status-zone">
+    <p class="status-word idle" id="statusWord">BELUM DICEK</p>
+    <p class="status-detail" id="statusDetail">Klik "Cek Sekarang" untuk verifikasi lisensi</p>
+  </div>
+
+  <div class="fields">
+    <div class="field">
+      <label for="ownerId">Owner ID</label>
+      <input type="text" id="ownerId" placeholder="mis. 123456789">
+    </div>
+    <div class="field">
+      <label for="ownerType">Owner Type</label>
+      <input type="text" id="ownerType" placeholder="User / Group">
+    </div>
+    <div class="field full">
+      <label for="product">Product</label>
+      <input type="text" id="product" value="kit-naka">
+    </div>
+  </div>
+
+  <div class="actions">
+    <button id="checkBtn">Cek Sekarang</button>
+    <span class="last-check" id="lastCheck">belum pernah dicek</span>
+  </div>
+
+  <div class="raw">
+    <label>Response mentah</label>
+    <pre id="rawOutput"><span class="empty">— belum ada data —</span></pre>
+  </div>
+</div>
+
+<script>
+const LICENSE_URL = "https://kitnaka-license-api.vercel.app/verify";
+
+const checkBtn = document.getElementById('checkBtn');
+const statusWord = document.getElementById('statusWord');
+const statusDetail = document.getElementById('statusDetail');
+const pulseDot = document.getElementById('pulseDot');
+const rawOutput = document.getElementById('rawOutput');
+const lastCheck = document.getElementById('lastCheck');
+
+function setState(kind, word, detail){
+  statusWord.className = 'status-word ' + kind;
+  pulseDot.className = 'pulse ' + kind;
+  statusWord.textContent = word;
+  statusDetail.textContent = detail;
+}
+
+function fmtTime(d){
+  return d.toLocaleTimeString('id-ID', { hour12:false });
+}
+
+checkBtn.addEventListener('click', async () => {
+  const ownerId = document.getElementById('ownerId').value.trim();
+  const ownerType = document.getElementById('ownerType').value.trim() || 'User';
+  const product = document.getElementById('product').value.trim() || 'kit-naka';
+
+  if(!ownerId){
+    setState('warn', 'INPUT KURANG', 'Isi Owner ID dulu sebelum cek.');
+    return;
+  }
+
+  checkBtn.disabled = true;
+  setState('warn', 'MENGECEK...', 'Menghubungi server lisensi.');
+
+  try{
+    const res = await fetch(LICENSE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ownerId, ownerType, product })
+    });
+
+    const text = await res.text();
+    let data;
+    try{ data = JSON.parse(text); } catch(e){ data = { raw: text }; }
+
+    rawOutput.textContent = JSON.stringify(data, null, 2);
+    lastCheck.textContent = 'terakhir dicek: ' + fmtTime(new Date());
+
+    if(!res.ok){
+      setState('bad', 'GAGAL', 'Server merespons dengan error (' + res.status + ').');
+    } else if(data.valid === true){
+      setState('ok', 'VALID', 'Lisensi aktif dan terverifikasi.');
+    } else if(data.valid === false){
+      setState('bad', 'TIDAK VALID', 'Server menyatakan lisensi ini tidak valid.');
+    } else {
+      setState('warn', 'RESPON TAK DIKENAL', 'Server membalas, tapi field "valid" tidak ditemukan.');
+    }
+  } catch(err){
+    rawOutput.textContent = String(err);
+    lastCheck.textContent = 'terakhir dicek: ' + fmtTime(new Date());
+    setState('bad', 'TIDAK TERHUBUNG', 'Gagal konek ke server lisensi (jaringan/CORS).');
+  } finally {
+    checkBtn.disabled = false;
+  }
+});
+</script>
+
+</body>
+</html>
