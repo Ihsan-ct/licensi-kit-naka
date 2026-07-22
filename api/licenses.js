@@ -40,38 +40,77 @@ export default async function handler(req, res) {
       const licenses = await licRes.json();
       const installations = await instRes.json();
 
-      const instMap = {};
+      // Kumpulkan SEMUA install per owner+product jadi array (bukan cuma yang
+      // terakhir aktif) -- satu owner bisa pasang lisensi yang sama di banyak
+      // place sekaligus (verify.js memang tidak membatasi jumlah place per
+      // lisensi), jadi semuanya harus kelihatan di dashboard, bukan cuma satu.
+      const instGroups = {};
       for (const inst of (Array.isArray(installations) ? installations : [])) {
         const key = `${inst.owner_id}:${inst.product}`;
-        // ambil yang last_seen_at paling baru per owner+product (installations
-        // sudah diurutkan desc, jadi entry pertama yang ketemu itu yang terbaru)
-        if (!instMap[key]) instMap[key] = inst;
+        if (!instGroups[key]) instGroups[key] = [];
+        instGroups[key].push(inst);
       }
+      // installations sudah diurutkan last_seen_at.desc dari query, jadi tiap
+      // array di instGroups otomatis juga terurut dari yang paling baru aktif.
 
-      const merged = (Array.isArray(licenses) ? licenses : []).map((lic) => {
-        const inst = instMap[`${lic.owner_id}:${lic.product}`];
-        return {
+      // Satu baris output per INSTALASI (bukan per lisensi) -- kalau owner
+      // punya N place yang pasang lisensi yang sama, hasilnya N baris dengan
+      // status lisensi yang sama tapi info map (place_id, player_count, dst)
+      // masing-masing berbeda. Dashboard.html merender array baris apa
+      // adanya tanpa dedup ulang, jadi tidak perlu ada perubahan di frontend.
+      const merged = [];
+      for (const lic of (Array.isArray(licenses) ? licenses : [])) {
+        const insts = instGroups[`${lic.owner_id}:${lic.product}`] || [];
+
+        const baseLicenseFields = {
           owner_id: lic.owner_id,
           owner_type: lic.owner_type,
           product: lic.product,
           status: lic.status,
           expires_at: lic.expires_at,
-          created_at: lic.created_at,
-          place_id: inst?.place_id ?? null,
-          universe_id: inst?.universe_id ?? null,
-          place_name: inst?.place_name ?? null,
-          game_name: inst?.game_name ?? null,
-          job_id: inst?.job_id ?? null,
-          player_count: inst?.player_count ?? null,
-          max_players: inst?.max_players ?? null,
-          is_private_server: inst?.is_private_server ?? null,
-          is_studio: inst?.is_studio ?? null,
-          system_version: inst?.system_version ?? null,
-          first_seen_at: inst?.first_seen_at ?? null,
-          last_seen_at: inst?.last_seen_at ?? null,
-          ever_connected: !!inst
+          created_at: lic.created_at
         };
-      });
+
+        if (insts.length === 0) {
+          // Lisensi ada tapi belum pernah connect ke place mana pun.
+          merged.push({
+            ...baseLicenseFields,
+            place_id: null,
+            universe_id: null,
+            place_name: null,
+            game_name: null,
+            job_id: null,
+            player_count: null,
+            max_players: null,
+            is_private_server: null,
+            is_studio: null,
+            system_version: null,
+            first_seen_at: null,
+            last_seen_at: null,
+            ever_connected: false
+          });
+          continue;
+        }
+
+        for (const inst of insts) {
+          merged.push({
+            ...baseLicenseFields,
+            place_id: inst.place_id ?? null,
+            universe_id: inst.universe_id ?? null,
+            place_name: inst.place_name ?? null,
+            game_name: inst.game_name ?? null,
+            job_id: inst.job_id ?? null,
+            player_count: inst.player_count ?? null,
+            max_players: inst.max_players ?? null,
+            is_private_server: inst.is_private_server ?? null,
+            is_studio: inst.is_studio ?? null,
+            system_version: inst.system_version ?? null,
+            first_seen_at: inst.first_seen_at ?? null,
+            last_seen_at: inst.last_seen_at ?? null,
+            ever_connected: true
+          });
+        }
+      }
 
       return res.status(200).json({ licenses: merged });
     } catch (err) {
