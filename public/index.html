@@ -3,290 +3,477 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>kit naka — License Status</title>
+<meta name="theme-color" content="#07111f">
+<title>Kit Naka — License Dashboard</title>
 <style>
   :root{
-    --bg:#0B0E11;
-    --panel:#12161B;
-    --line:#1E242B;
-    --text:#D8DEE4;
-    --dim:#6B7580;
-    --ok:#4FD1C5;
-    --bad:#E5484D;
-    --warn:#F5A623;
-    --mono: 'JetBrains Mono', 'SF Mono', 'Consolas', monospace;
-    --sans: 'Inter', -apple-system, sans-serif;
+    --bg:#07111f;
+    --bg2:#0a1627;
+    --panel:#0f1d30;
+    --panel2:#12243a;
+    --line:#213752;
+    --line2:#2c4868;
+    --text:#e7eef8;
+    --dim:#8ea0b7;
+    --muted:#60748c;
+    --ok:#4fd1c5;
+    --bad:#ff6670;
+    --warn:#f5b942;
+    --info:#69a8ff;
+    --shadow:0 22px 70px rgba(0,0,0,.34);
+    --mono:'JetBrains Mono','SFMono-Regular',Consolas,monospace;
+    --sans:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
   }
-  *{box-sizing:border-box;}
+
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
   body{
     margin:0;
-    background:var(--bg);
-    color:var(--text);
-    font-family:var(--sans);
     min-height:100vh;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    padding:24px;
-  }
-  .board{
-    width:100%;
-    max-width:560px;
-    background:var(--panel);
-    border:1px solid var(--line);
-    border-radius:10px;
-    overflow:hidden;
-  }
-  .board-head{
-    padding:20px 24px;
-    border-bottom:1px solid var(--line);
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
-  }
-  .board-head h1{
-    font-size:14px;
-    font-weight:600;
-    letter-spacing:0.02em;
-    margin:0;
     color:var(--text);
-  }
-  .board-head .sub{
-    font-family:var(--mono);
-    font-size:11px;
-    color:var(--dim);
-    margin-top:4px;
-  }
-  .pulse{
-    width:8px;height:8px;border-radius:50%;
-    background:var(--dim);
-    flex-shrink:0;
-  }
-  .pulse.ok{background:var(--ok); box-shadow:0 0 0 0 rgba(79,209,197,0.5); animation:pulse-ok 2s infinite;}
-  .pulse.bad{background:var(--bad); box-shadow:0 0 0 0 rgba(229,72,77,0.5); animation:pulse-bad 2s infinite;}
-  .pulse.warn{background:var(--warn); box-shadow:0 0 0 0 rgba(245,166,35,0.5); animation:pulse-warn 2s infinite;}
-  @keyframes pulse-ok{0%{box-shadow:0 0 0 0 rgba(79,209,197,0.45);}70%{box-shadow:0 0 0 8px rgba(79,209,197,0);}100%{box-shadow:0 0 0 0 rgba(79,209,197,0);}}
-  @keyframes pulse-bad{0%{box-shadow:0 0 0 0 rgba(229,72,77,0.45);}70%{box-shadow:0 0 0 8px rgba(229,72,77,0);}100%{box-shadow:0 0 0 0 rgba(229,72,77,0);}}
-  @keyframes pulse-warn{0%{box-shadow:0 0 0 0 rgba(245,166,35,0.45);}70%{box-shadow:0 0 0 8px rgba(245,166,35,0);}100%{box-shadow:0 0 0 0 rgba(245,166,35,0);}}
-
-  .status-zone{
-    padding:32px 24px 24px;
-    text-align:center;
-    border-bottom:1px solid var(--line);
-  }
-  .status-word{
-    font-family:var(--mono);
-    font-size:32px;
-    font-weight:700;
-    letter-spacing:-0.01em;
-    margin:0;
-  }
-  .status-word.ok{color:var(--ok);}
-  .status-word.bad{color:var(--bad);}
-  .status-word.warn{color:var(--warn);}
-  .status-word.idle{color:var(--dim);}
-  .status-detail{
-    font-size:13px;
-    color:var(--dim);
-    margin-top:8px;
-  }
-
-  .fields{
-    padding:20px 24px;
-    display:grid;
-    grid-template-columns:1fr 1fr;
-    gap:12px;
-    border-bottom:1px solid var(--line);
-  }
-  .field{grid-column:span 1;}
-  .field.full{grid-column:span 2;}
-  .field label{
-    display:block;
-    font-size:11px;
-    color:var(--dim);
-    margin-bottom:6px;
-    text-transform:uppercase;
-    letter-spacing:0.04em;
-  }
-  .field input{
-    width:100%;
-    background:var(--bg);
-    border:1px solid var(--line);
-    border-radius:6px;
-    padding:9px 10px;
-    color:var(--text);
-    font-family:var(--mono);
-    font-size:13px;
-  }
-  .field input:focus{outline:1px solid var(--ok); border-color:var(--ok);}
-
-  .actions{
-    padding:20px 24px;
-    display:flex;
-    gap:10px;
-    align-items:center;
-    border-bottom:1px solid var(--line);
-  }
-  button{
     font-family:var(--sans);
-    font-size:13px;
-    font-weight:600;
-    padding:10px 18px;
-    border-radius:6px;
-    border:1px solid var(--line);
-    background:var(--ok);
-    color:#06201D;
-    cursor:pointer;
-  }
-  button:disabled{opacity:0.5; cursor:default;}
-  .last-check{
-    font-family:var(--mono);
-    font-size:11px;
-    color:var(--dim);
+    background:
+      radial-gradient(circle at 18% 8%,rgba(34,100,170,.23),transparent 30%),
+      radial-gradient(circle at 85% 18%,rgba(79,209,197,.10),transparent 24%),
+      linear-gradient(180deg,var(--bg),#050b14 72%);
   }
 
-  .raw{
-    padding:20px 24px;
-  }
-  .raw label{
-    font-size:11px;
-    color:var(--dim);
-    text-transform:uppercase;
-    letter-spacing:0.04em;
-    display:block;
-    margin-bottom:8px;
-  }
-  pre{
-    margin:0;
-    font-family:var(--mono);
-    font-size:12px;
-    line-height:1.6;
-    color:var(--text);
-    background:var(--bg);
-    border:1px solid var(--line);
-    border-radius:6px;
-    padding:12px;
-    white-space:pre-wrap;
-    word-break:break-all;
-    max-height:200px;
-    overflow-y:auto;
-  }
-  .empty{color:var(--dim); font-style:italic;}
+  button,input,select{font:inherit}
+  button{border:0}
+  .app{width:min(1180px,calc(100% - 32px));margin:0 auto;padding:28px 0 44px}
 
-  @media (prefers-reduced-motion: reduce){
-    .pulse.ok,.pulse.bad,.pulse.warn{animation:none;}
+  .topbar{
+    display:flex;align-items:center;justify-content:space-between;gap:18px;
+    padding:18px 20px;margin-bottom:18px;
+    border:1px solid rgba(71,112,154,.45);border-radius:18px;
+    background:rgba(10,22,39,.84);backdrop-filter:blur(16px);box-shadow:var(--shadow)
   }
+  .brand{display:flex;align-items:center;gap:14px;min-width:0}
+  .logo{
+    width:44px;height:44px;display:grid;place-items:center;border-radius:13px;
+    font-family:var(--mono);font-weight:900;color:#05211f;
+    background:linear-gradient(145deg,#6ae1d6,#3eb7ae);box-shadow:0 0 28px rgba(79,209,197,.22)
+  }
+  .brand h1{font-size:16px;margin:0 0 4px;letter-spacing:.01em}
+  .brand p{font:11px var(--mono);margin:0;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .top-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+  .server-pill,.version-pill{
+    display:flex;align-items:center;gap:8px;padding:8px 11px;border:1px solid var(--line);
+    border-radius:999px;background:#0a1728;color:var(--dim);font:11px var(--mono)
+  }
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--muted);flex:0 0 auto}
+  .dot.ok{background:var(--ok);box-shadow:0 0 0 6px rgba(79,209,197,.08)}
+  .dot.bad{background:var(--bad);box-shadow:0 0 0 6px rgba(255,102,112,.08)}
+  .dot.warn{background:var(--warn);box-shadow:0 0 0 6px rgba(245,185,66,.08)}
+
+  .hero{
+    display:grid;grid-template-columns:1.45fr .85fr;gap:18px;margin-bottom:18px
+  }
+  .card{
+    border:1px solid rgba(71,112,154,.45);border-radius:18px;
+    background:linear-gradient(180deg,rgba(15,29,48,.96),rgba(10,22,39,.96));
+    box-shadow:var(--shadow);overflow:hidden
+  }
+  .status-card{padding:26px;position:relative;min-height:270px}
+  .status-card:after{
+    content:"";position:absolute;inset:auto -70px -95px auto;width:240px;height:240px;border-radius:50%;
+    background:radial-gradient(circle,rgba(79,209,197,.16),transparent 65%);pointer-events:none
+  }
+  .eyebrow{font:11px var(--mono);letter-spacing:.13em;color:var(--dim);text-transform:uppercase}
+  .status-row{display:flex;align-items:flex-start;justify-content:space-between;gap:22px;margin-top:22px}
+  .status-main{min-width:0}
+  .status-word{font:800 clamp(38px,6vw,68px)/1 var(--mono);letter-spacing:-.055em;margin:0;color:var(--muted)}
+  .status-word.ok{color:var(--ok)}
+  .status-word.bad{color:var(--bad)}
+  .status-word.warn{color:var(--warn)}
+  .status-word.info{color:var(--info)}
+  .status-detail{margin:14px 0 0;color:var(--dim);font-size:14px;line-height:1.6;max-width:610px}
+  .verify-mark{
+    width:66px;height:66px;border-radius:50%;display:grid;place-items:center;flex:0 0 auto;
+    border:1px solid var(--line2);background:#0b192b;color:var(--muted);font-size:28px;font-weight:900
+  }
+  .verify-mark.ok{color:var(--ok);border-color:rgba(79,209,197,.45);background:rgba(79,209,197,.08)}
+  .verify-mark.bad{color:var(--bad);border-color:rgba(255,102,112,.45);background:rgba(255,102,112,.08)}
+  .verify-mark.warn{color:var(--warn);border-color:rgba(245,185,66,.45);background:rgba(245,185,66,.08)}
+  .status-meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:24px}
+  .mini-chip{padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:#091525;color:var(--dim);font:11px var(--mono)}
+
+  .form-card{padding:22px}
+  .section-title{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:17px}
+  .section-title h2{font-size:14px;margin:0}
+  .section-title p{font-size:12px;color:var(--dim);margin:5px 0 0;line-height:1.5}
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .field.full{grid-column:1/-1}
+  label{display:block;margin-bottom:7px;color:var(--dim);font:10px var(--mono);letter-spacing:.08em;text-transform:uppercase}
+  input,select{
+    width:100%;border:1px solid var(--line);border-radius:10px;padding:11px 12px;
+    background:#081523;color:var(--text);outline:none;font:12px var(--mono);transition:.2s
+  }
+  input:focus,select:focus{border-color:var(--ok);box-shadow:0 0 0 3px rgba(79,209,197,.08)}
+  .actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:16px}
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:11px 15px;
+    border-radius:10px;border:1px solid var(--line);cursor:pointer;font-size:12px;font-weight:750;transition:.18s
+  }
+  .btn:hover{transform:translateY(-1px);border-color:var(--line2)}
+  .btn:active{transform:translateY(0)}
+  .btn:disabled{opacity:.55;cursor:not-allowed;transform:none}
+  .btn.primary{background:var(--ok);color:#05211f;border-color:transparent}
+  .btn.secondary{background:#0a1829;color:var(--text)}
+  .btn.danger{background:rgba(255,102,112,.08);color:#ff9ca3;border-color:rgba(255,102,112,.23)}
+  .spinner{width:14px;height:14px;border:2px solid rgba(5,33,31,.28);border-top-color:#05211f;border-radius:50%;animation:spin .7s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .auto-row{margin-top:15px;padding-top:14px;border-top:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .auto-copy strong{display:block;font-size:12px}.auto-copy span{display:block;color:var(--dim);font-size:11px;margin-top:4px}
+  .switch{position:relative;width:44px;height:24px;flex:0 0 auto}
+  .switch input{position:absolute;opacity:0;pointer-events:none}
+  .switch span{position:absolute;inset:0;border-radius:999px;background:#25364a;cursor:pointer;transition:.2s}
+  .switch span:after{content:"";position:absolute;width:18px;height:18px;border-radius:50%;left:3px;top:3px;background:white;transition:.2s}
+  .switch input:checked+span{background:var(--ok)}
+  .switch input:checked+span:after{transform:translateX(20px)}
+
+  .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
+  .metric{padding:17px 18px;border:1px solid rgba(71,112,154,.38);border-radius:15px;background:rgba(15,29,48,.86)}
+  .metric span{display:block;color:var(--dim);font:10px var(--mono);letter-spacing:.08em;text-transform:uppercase}
+  .metric strong{display:block;margin-top:10px;font:700 21px var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .metric small{display:block;color:var(--muted);font-size:11px;margin-top:7px}
+
+  .tabs{display:flex;gap:6px;padding:7px;border-bottom:1px solid var(--line);overflow:auto;background:#0a1728}
+  .tab-btn{white-space:nowrap;background:transparent;color:var(--dim);border:1px solid transparent;padding:10px 13px;border-radius:9px;cursor:pointer;font-size:12px;font-weight:700}
+  .tab-btn.active{background:#13263e;color:var(--text);border-color:var(--line)}
+  .tab-panel{display:none;padding:22px}.tab-panel.active{display:block}
+
+  .detail-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+  .detail-item{padding:14px;border:1px solid var(--line);border-radius:12px;background:#091625;min-width:0}
+  .detail-item span{display:block;color:var(--dim);font:10px var(--mono);letter-spacing:.07em;text-transform:uppercase;margin-bottom:8px}
+  .detail-item strong{font:600 12px var(--mono);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .copy-inline{display:flex;align-items:center;gap:8px}
+  .icon-btn{background:#10223a;color:var(--dim);border:1px solid var(--line);width:30px;height:30px;border-radius:8px;cursor:pointer;flex:0 0 auto}
+
+  .feature-list{display:flex;flex-wrap:wrap;gap:9px;margin-top:16px}
+  .feature{padding:8px 10px;border-radius:999px;background:rgba(79,209,197,.07);border:1px solid rgba(79,209,197,.20);color:#9be8e1;font-size:11px}
+  .empty-state{padding:28px;text-align:center;color:var(--dim);font-size:12px;border:1px dashed var(--line);border-radius:12px}
+
+  .health-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  .health{padding:16px;border:1px solid var(--line);border-radius:12px;background:#091625}
+  .health-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .health h3{font-size:12px;margin:0}.health p{margin:9px 0 0;color:var(--dim);font-size:11px;line-height:1.5}
+
+  .timeline{display:grid;gap:11px}
+  .step{display:grid;grid-template-columns:24px 1fr auto;gap:10px;align-items:start;padding:12px;border:1px solid var(--line);border-radius:11px;background:#091625}
+  .step-icon{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:#172a42;color:var(--dim);font-size:11px;font-weight:900}
+  .step.done .step-icon{background:rgba(79,209,197,.12);color:var(--ok)}
+  .step.fail .step-icon{background:rgba(255,102,112,.12);color:var(--bad)}
+  .step strong{display:block;font-size:12px}.step p{margin:4px 0 0;color:var(--dim);font-size:11px}.step time{font:10px var(--mono);color:var(--muted)}
+
+  .history-toolbar,.raw-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+  .history-list{display:grid;gap:9px}
+  .history-item{display:grid;grid-template-columns:12px 1fr auto;gap:11px;align-items:center;padding:12px 13px;border:1px solid var(--line);border-radius:11px;background:#091625}
+  .history-item strong{font-size:12px}.history-item p{margin:4px 0 0;color:var(--dim);font:10px var(--mono)}
+  .history-item time{color:var(--muted);font:10px var(--mono);text-align:right}
+  pre{margin:0;min-height:310px;max-height:520px;overflow:auto;padding:16px;border:1px solid var(--line);border-radius:12px;background:#06101d;color:#cfe0f4;font:11px/1.75 var(--mono);white-space:pre-wrap;word-break:break-word}
+
+  .toast{position:fixed;right:22px;bottom:22px;z-index:50;max-width:min(360px,calc(100% - 44px));padding:12px 14px;border:1px solid var(--line2);border-radius:11px;background:#10223a;color:var(--text);box-shadow:var(--shadow);font-size:12px;opacity:0;transform:translateY(12px);pointer-events:none;transition:.22s}
+  .toast.show{opacity:1;transform:translateY(0)}
+  .footer{text-align:center;color:var(--muted);font:10px var(--mono);padding-top:18px}
+
+  @media(max-width:900px){
+    .hero{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,1fr)}
+  }
+  @media(max-width:620px){
+    .app{width:min(100% - 20px,1180px);padding-top:10px}.topbar{align-items:flex-start;padding:15px}.top-actions{justify-content:flex-start}.version-pill{display:none}
+    .status-card,.form-card,.tab-panel{padding:18px}.status-row{gap:12px}.verify-mark{width:52px;height:52px;font-size:22px}
+    .form-grid,.detail-grid,.health-grid{grid-template-columns:1fr}.field.full{grid-column:auto}.metrics{grid-template-columns:1fr 1fr;gap:9px}.metric{padding:14px}.metric strong{font-size:17px}
+    .history-item{grid-template-columns:10px 1fr}.history-item time{grid-column:2;text-align:left}
+  }
+  @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 </style>
 </head>
 <body>
-
-<div class="board">
-  <div class="board-head">
-    <div>
-      <h1>kit naka — License Monitor</h1>
-      <div class="sub" id="urlLabel">kitnaka-license-api.vercel.app/api/verify</div>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">KN</div>
+      <div>
+        <h1>Kit Naka License Dashboard</h1>
+        <p id="urlLabel">kitnaka-license-api.vercel.app/verify</p>
+      </div>
     </div>
-    <div class="pulse idle" id="pulseDot"></div>
-  </div>
-
-  <div class="status-zone">
-    <p class="status-word idle" id="statusWord">BELUM DICEK</p>
-    <p class="status-detail" id="statusDetail">Klik "Cek Sekarang" untuk verifikasi lisensi</p>
-  </div>
-
-  <div class="fields">
-    <div class="field">
-      <label for="ownerId">Owner ID</label>
-      <input type="text" id="ownerId" placeholder="mis. 123456789">
+    <div class="top-actions">
+      <div class="server-pill"><span class="dot" id="serverDot"></span><span id="serverLabel">Belum diperiksa</span></div>
+      <div class="version-pill">Dashboard v2.0</div>
     </div>
-    <div class="field">
-      <label for="ownerType">Owner Type</label>
-      <input type="text" id="ownerType" placeholder="User / Group">
-    </div>
-    <div class="field full">
-      <label for="product">Product</label>
-      <input type="text" id="product" value="kit-naka">
-    </div>
-  </div>
+  </header>
 
-  <div class="actions">
-    <button id="checkBtn">Cek Sekarang</button>
-    <span class="last-check" id="lastCheck">belum pernah dicek</span>
-  </div>
+  <section class="hero">
+    <article class="card status-card">
+      <div class="eyebrow">Status verifikasi lisensi</div>
+      <div class="status-row">
+        <div class="status-main">
+          <h2 class="status-word" id="statusWord">BELUM DICEK</h2>
+          <p class="status-detail" id="statusDetail">Masukkan Owner ID lalu tekan “Cek Sekarang” untuk memverifikasi lisensi.</p>
+        </div>
+        <div class="verify-mark" id="verifyMark">?</div>
+      </div>
+      <div class="status-meta">
+        <span class="mini-chip" id="lastCheck">Terakhir: belum pernah</span>
+        <span class="mini-chip" id="httpStatus">HTTP: —</span>
+        <span class="mini-chip" id="requestId">Request: —</span>
+      </div>
+    </article>
 
-  <div class="raw">
-    <label>Response mentah</label>
-    <pre id="rawOutput"><span class="empty">— belum ada data —</span></pre>
-  </div>
+    <aside class="card form-card">
+      <div class="section-title">
+        <div><h2>Verifikasi Lisensi</h2><p>Data dikirim langsung ke endpoint lisensi.</p></div>
+      </div>
+      <div class="form-grid">
+        <div class="field">
+          <label for="ownerId">Owner ID</label>
+          <input id="ownerId" type="text" inputmode="numeric" autocomplete="off" placeholder="123456789">
+        </div>
+        <div class="field">
+          <label for="ownerType">Owner Type</label>
+          <select id="ownerType"><option value="User">User</option><option value="Group">Group</option></select>
+        </div>
+        <div class="field full">
+          <label for="product">Product</label>
+          <input id="product" type="text" value="kit-naka" autocomplete="off">
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn primary" id="checkBtn">Cek Sekarang</button>
+        <button class="btn secondary" id="resetBtn" type="button">Reset</button>
+      </div>
+      <div class="auto-row">
+        <div class="auto-copy"><strong>Auto verify</strong><span>Cek ulang setiap 30 detik</span></div>
+        <label class="switch"><input id="autoRefresh" type="checkbox"><span></span></label>
+      </div>
+    </aside>
+  </section>
+
+  <section class="metrics">
+    <div class="metric"><span>Status Lisensi</span><strong id="metricStatus">—</strong><small id="metricStatusHint">Belum diverifikasi</small></div>
+    <div class="metric"><span>Response Time</span><strong id="metricPing">—</strong><small id="metricPingHint">Menunggu request</small></div>
+    <div class="metric"><span>Owner</span><strong id="metricOwner">—</strong><small id="metricOwnerHint">Owner belum dimuat</small></div>
+    <div class="metric"><span>Masa Aktif</span><strong id="metricExpiry">—</strong><small id="metricExpiryHint">Data belum tersedia</small></div>
+  </section>
+
+  <main class="card">
+    <nav class="tabs" aria-label="Dashboard sections">
+      <button class="tab-btn active" data-tab="overview">Overview</button>
+      <button class="tab-btn" data-tab="health">API Health</button>
+      <button class="tab-btn" data-tab="timeline">Timeline</button>
+      <button class="tab-btn" data-tab="history">Riwayat</button>
+      <button class="tab-btn" data-tab="raw">Raw JSON</button>
+    </nav>
+
+    <section class="tab-panel active" id="overview">
+      <div class="section-title"><div><h2>Informasi Lisensi</h2><p>Field akan menyesuaikan data yang dikirim API.</p></div></div>
+      <div class="detail-grid">
+        <div class="detail-item"><span>License ID</span><div class="copy-inline"><strong id="detailLicenseId">—</strong><button class="icon-btn" data-copy-target="detailLicenseId" title="Salin">⧉</button></div></div>
+        <div class="detail-item"><span>Product</span><strong id="detailProduct">—</strong></div>
+        <div class="detail-item"><span>Owner ID</span><div class="copy-inline"><strong id="detailOwnerId">—</strong><button class="icon-btn" data-copy-target="detailOwnerId" title="Salin">⧉</button></div></div>
+        <div class="detail-item"><span>Owner Type</span><strong id="detailOwnerType">—</strong></div>
+        <div class="detail-item"><span>Issued / Registered</span><strong id="detailIssued">—</strong></div>
+        <div class="detail-item"><span>Expires</span><strong id="detailExpires">—</strong></div>
+        <div class="detail-item"><span>Version</span><strong id="detailVersion">—</strong></div>
+        <div class="detail-item"><span>Signature</span><strong id="detailSignature">Belum diverifikasi</strong></div>
+      </div>
+      <div class="section-title" style="margin-top:22px"><div><h2>Fitur Lisensi</h2><p>Fitur yang diterima dari server.</p></div></div>
+      <div class="feature-list" id="featureList"><div class="empty-state" style="width:100%">Belum ada data fitur.</div></div>
+    </section>
+
+    <section class="tab-panel" id="health">
+      <div class="health-grid">
+        <div class="health"><div class="health-head"><h3>API Server</h3><span class="dot" id="healthApiDot"></span></div><p id="healthApiText">Belum dilakukan request.</p></div>
+        <div class="health"><div class="health-head"><h3>Response</h3><span class="dot" id="healthResponseDot"></span></div><p id="healthResponseText">Status HTTP belum tersedia.</p></div>
+        <div class="health"><div class="health-head"><h3>License Signature</h3><span class="dot" id="healthSignatureDot"></span></div><p id="healthSignatureText">Menunggu hasil verifikasi.</p></div>
+      </div>
+    </section>
+
+    <section class="tab-panel" id="timeline">
+      <div class="timeline" id="timelineList">
+        <div class="step"><div class="step-icon">1</div><div><strong>Menunggu verifikasi</strong><p>Belum ada proses yang dijalankan.</p></div><time>—</time></div>
+      </div>
+    </section>
+
+    <section class="tab-panel" id="history">
+      <div class="history-toolbar"><div><strong style="font-size:13px">Riwayat lokal</strong><div style="color:var(--dim);font-size:11px;margin-top:4px">Disimpan di browser ini, maksimal 20 entri.</div></div><button class="btn danger" id="clearHistoryBtn">Hapus Riwayat</button></div>
+      <div class="history-list" id="historyList"><div class="empty-state">Belum ada riwayat verifikasi.</div></div>
+    </section>
+
+    <section class="tab-panel" id="raw">
+      <div class="raw-toolbar"><div><strong style="font-size:13px">Response mentah</strong><div style="color:var(--dim);font-size:11px;margin-top:4px">Gunakan untuk debugging endpoint.</div></div><div class="actions" style="margin:0"><button class="btn secondary" id="copyJsonBtn">Salin JSON</button><button class="btn secondary" id="downloadJsonBtn">Download JSON</button></div></div>
+      <pre id="rawOutput">— belum ada data —</pre>
+    </section>
+  </main>
+
+  <div class="footer">KIT NAKA LICENSING • CLIENT-SIDE MONITOR</div>
 </div>
+<div class="toast" id="toast"></div>
 
 <script>
-// ✅ URL SUDAH DIPERBAIKI MENJADI /api/verify
-const LICENSE_URL = "https://kitnaka-license-api.vercel.app/api/verify";
+'use strict';
+const LICENSE_URL = 'https://kitnaka-license-api.vercel.app/verify';
+const HISTORY_KEY = 'kitnaka_license_history_v2';
+const FORM_KEY = 'kitnaka_license_form_v2';
+let latestData = null;
+let autoTimer = null;
 
-const checkBtn = document.getElementById('checkBtn');
-const statusWord = document.getElementById('statusWord');
-const statusDetail = document.getElementById('statusDetail');
-const pulseDot = document.getElementById('pulseDot');
-const rawOutput = document.getElementById('rawOutput');
-const lastCheck = document.getElementById('lastCheck');
+const $ = (id) => document.getElementById(id);
+const els = {
+  ownerId:$('ownerId'), ownerType:$('ownerType'), product:$('product'), checkBtn:$('checkBtn'), resetBtn:$('resetBtn'),
+  statusWord:$('statusWord'), statusDetail:$('statusDetail'), verifyMark:$('verifyMark'), lastCheck:$('lastCheck'),
+  httpStatus:$('httpStatus'), requestId:$('requestId'), rawOutput:$('rawOutput'), autoRefresh:$('autoRefresh')
+};
+
+function pick(obj, keys, fallback='—'){
+  for(const key of keys){
+    const value = key.split('.').reduce((acc, part) => acc && acc[part], obj);
+    if(value !== undefined && value !== null && value !== '') return value;
+  }
+  return fallback;
+}
+function boolish(value){
+  if(value === true || value === 'true' || value === 1 || value === 'valid' || value === 'active') return true;
+  if(value === false || value === 'false' || value === 0 || value === 'invalid' || value === 'revoked') return false;
+  return null;
+}
+function formatDate(value){
+  if(!value || value === '—') return '—';
+  if(String(value).toLowerCase().includes('life')) return 'Lifetime';
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? String(value) : d.toLocaleString('id-ID',{dateStyle:'medium',timeStyle:'short'});
+}
+function formatTime(date=new Date()){return date.toLocaleTimeString('id-ID',{hour12:false});}
+function makeRequestId(){return 'KN-' + Date.now().toString(36).toUpperCase().slice(-7);}
+function showToast(message){const t=$('toast');t.textContent=message;t.classList.add('show');clearTimeout(t._timer);t._timer=setTimeout(()=>t.classList.remove('show'),2200)}
+function setDot(el,kind=''){el.className='dot'+(kind?' '+kind:'')}
+function setText(id,value){$(id).textContent=value ?? '—'}
 
 function setState(kind, word, detail){
-  statusWord.className = 'status-word ' + kind;
-  pulseDot.className = 'pulse ' + kind;
-  statusWord.textContent = word;
-  statusDetail.textContent = detail;
+  els.statusWord.className='status-word'+(kind?' '+kind:'');
+  els.verifyMark.className='verify-mark'+(kind?' '+kind:'');
+  els.statusWord.textContent=word;
+  els.statusDetail.textContent=detail;
+  els.verifyMark.textContent=kind==='ok'?'✓':kind==='bad'?'×':kind==='warn'?'!':'?';
+}
+function setLoading(loading){
+  els.checkBtn.disabled=loading;
+  els.checkBtn.innerHTML=loading?'<span class="spinner"></span> Mengecek...':'Cek Sekarang';
+}
+function resetDashboard(keepForm=true){
+  latestData=null; setState('', 'BELUM DICEK','Masukkan Owner ID lalu tekan “Cek Sekarang” untuk memverifikasi lisensi.');
+  ['metricStatus','metricPing','metricOwner','metricExpiry','detailLicenseId','detailProduct','detailOwnerId','detailOwnerType','detailIssued','detailExpires','detailVersion'].forEach(id=>setText(id,'—'));
+  setText('metricStatusHint','Belum diverifikasi');setText('metricPingHint','Menunggu request');setText('metricOwnerHint','Owner belum dimuat');setText('metricExpiryHint','Data belum tersedia');
+  setText('detailSignature','Belum diverifikasi');els.lastCheck.textContent='Terakhir: belum pernah';els.httpStatus.textContent='HTTP: —';els.requestId.textContent='Request: —';els.rawOutput.textContent='— belum ada data —';
+  $('featureList').innerHTML='<div class="empty-state" style="width:100%">Belum ada data fitur.</div>';
+  $('timelineList').innerHTML='<div class="step"><div class="step-icon">1</div><div><strong>Menunggu verifikasi</strong><p>Belum ada proses yang dijalankan.</p></div><time>—</time></div>';
+  setDot($('serverDot'));setText('serverLabel','Belum diperiksa');setDot($('healthApiDot'));setDot($('healthResponseDot'));setDot($('healthSignatureDot'));
+  setText('healthApiText','Belum dilakukan request.');setText('healthResponseText','Status HTTP belum tersedia.');setText('healthSignatureText','Menunggu hasil verifikasi.');
+  if(!keepForm){els.ownerId.value='';els.ownerType.value='User';els.product.value='kit-naka';localStorage.removeItem(FORM_KEY)}
+}
+function updateTimeline(steps){
+  $('timelineList').innerHTML=steps.map((s,i)=>`<div class="step ${s.state||''}"><div class="step-icon">${s.state==='done'?'✓':s.state==='fail'?'×':i+1}</div><div><strong>${escapeHtml(s.title)}</strong><p>${escapeHtml(s.detail)}</p></div><time>${escapeHtml(s.time||'—')}</time></div>`).join('');
+}
+function escapeHtml(value){return String(value).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
+
+function renderResult(data, meta){
+  latestData=data;
+  const validRaw=pick(data,['valid','isValid','license.valid','status'],null);
+  const valid=boolish(validRaw);
+  const ownerId=pick(data,['ownerId','owner_id','owner.id','license.ownerId'],els.ownerId.value);
+  const ownerType=pick(data,['ownerType','owner_type','owner.type','license.ownerType'],els.ownerType.value);
+  const product=pick(data,['product','productId','product_id','license.product'],els.product.value);
+  const licenseId=pick(data,['licenseId','license_id','id','license.id'],'—');
+  const issued=pick(data,['issuedAt','issued_at','createdAt','created_at','registeredAt','license.issuedAt'],'—');
+  const expires=pick(data,['expiresAt','expires_at','expiry','expiration','license.expiresAt'],'—');
+  const version=pick(data,['version','productVersion','product_version','license.version'],'—');
+  const signatureRaw=pick(data,['signatureValid','signature_valid','verified','license.signatureValid'],valid);
+  const signature=boolish(signatureRaw);
+  const featuresRaw=pick(data,['features','license.features','entitlements','permissions'],[]);
+  const features=Array.isArray(featuresRaw)?featuresRaw:Object.keys(featuresRaw||{}).filter(k=>featuresRaw[k]);
+
+  if(!meta.ok){setState('bad','GAGAL',`Server merespons dengan error HTTP ${meta.status}.`)}
+  else if(valid===true){setState('ok','VALID',pick(data,['message','detail'],'Lisensi aktif dan berhasil diverifikasi.'))}
+  else if(valid===false){setState('bad','TIDAK VALID',pick(data,['message','reason','detail'],'Lisensi tidak aktif, tidak cocok, atau telah dicabut.'))}
+  else{setState('warn','RESPON TAK DIKENAL','Server merespons, tetapi field status lisensi tidak dikenali.')}
+
+  const kind=!meta.ok?'bad':valid===true?'ok':valid===false?'bad':'warn';
+  setDot($('serverDot'),meta.ok?'ok':'bad');setText('serverLabel',meta.ok?'API online':'API error');
+  els.lastCheck.textContent='Terakhir: '+formatTime(meta.checkedAt);els.httpStatus.textContent='HTTP: '+meta.status;els.requestId.textContent='Request: '+meta.requestId;
+  setText('metricStatus',valid===true?'VALID':valid===false?'INVALID':'UNKNOWN');setText('metricStatusHint',meta.ok?'Verifikasi selesai':'Request gagal');
+  setText('metricPing',meta.duration+' ms');setText('metricPingHint',meta.duration<250?'Sangat cepat':meta.duration<700?'Normal':'Lambat');
+  setText('metricOwner',String(ownerId));setText('metricOwnerHint',String(ownerType));
+  setText('metricExpiry',String(expires).toLowerCase().includes('life')?'Lifetime':formatDate(expires));setText('metricExpiryHint',expires==='—'?'Tidak dikirim server':'Masa berlaku lisensi');
+
+  setText('detailLicenseId',licenseId);setText('detailProduct',product);setText('detailOwnerId',ownerId);setText('detailOwnerType',ownerType);setText('detailIssued',formatDate(issued));setText('detailExpires',formatDate(expires));setText('detailVersion',version);
+  setText('detailSignature',signature===true?'Verified':signature===false?'Invalid':'Tidak tersedia');
+
+  $('featureList').innerHTML=features.length?features.map(f=>`<span class="feature">✓ ${escapeHtml(typeof f==='string'?f:JSON.stringify(f))}</span>`).join(''):'<div class="empty-state" style="width:100%">Server tidak mengirim daftar fitur.</div>';
+  els.rawOutput.textContent=JSON.stringify(data,null,2);
+
+  setDot($('healthApiDot'),meta.ok?'ok':'bad');setText('healthApiText',meta.ok?`Endpoint dapat dijangkau dalam ${meta.duration} ms.`:'Endpoint merespons dengan error.');
+  setDot($('healthResponseDot'),meta.ok?'ok':'bad');setText('healthResponseText',`HTTP ${meta.status} • ${meta.contentType||'content-type tidak tersedia'}`);
+  setDot($('healthSignatureDot'),signature===true?'ok':signature===false?'bad':'warn');setText('healthSignatureText',signature===true?'Signature/verifikasi dinyatakan valid.':signature===false?'Signature/verifikasi dinyatakan tidak valid.':'Server tidak mengirim status signature.');
+
+  updateTimeline([
+    {state:'done',title:'Input divalidasi',detail:`Owner ${ownerType}: ${ownerId}`,time:formatTime(meta.startedAt)},
+    {state:'done',title:'Request dikirim',detail:LICENSE_URL,time:formatTime(meta.startedAt)},
+    {state:meta.ok?'done':'fail',title:'Server merespons',detail:`HTTP ${meta.status} dalam ${meta.duration} ms`,time:formatTime(meta.checkedAt)},
+    {state:kind==='ok'?'done':kind==='bad'?'fail':'',title:'Lisensi dievaluasi',detail:valid===true?'Lisensi valid.':valid===false?'Lisensi tidak valid.':'Format respons tidak dikenali.',time:formatTime(meta.checkedAt)}
+  ]);
+  saveHistory({ownerId,ownerType,product,valid,status:meta.status,duration:meta.duration,checkedAt:meta.checkedAt.toISOString(),message:els.statusDetail.textContent});
 }
 
-function fmtTime(d){
-  return d.toLocaleTimeString('id-ID', { hour12:false });
+function saveHistory(entry){
+  const history=getHistory();history.unshift(entry);localStorage.setItem(HISTORY_KEY,JSON.stringify(history.slice(0,20)));renderHistory();
+}
+function getHistory(){try{return JSON.parse(localStorage.getItem(HISTORY_KEY)||'[]')}catch{return []}}
+function renderHistory(){
+  const history=getHistory();
+  $('historyList').innerHTML=history.length?history.map(item=>{
+    const kind=item.valid===true?'ok':item.valid===false?'bad':'warn';
+    return `<div class="history-item"><span class="dot ${kind}"></span><div><strong>${item.valid===true?'VALID':item.valid===false?'TIDAK VALID':'UNKNOWN'} — ${escapeHtml(item.ownerId)}</strong><p>${escapeHtml(item.ownerType)} • ${escapeHtml(item.product)} • HTTP ${item.status} • ${item.duration} ms</p></div><time>${new Date(item.checkedAt).toLocaleString('id-ID')}</time></div>`
+  }).join(''):'<div class="empty-state">Belum ada riwayat verifikasi.</div>';
 }
 
-checkBtn.addEventListener('click', async () => {
-  const ownerId = document.getElementById('ownerId').value.trim();
-  const ownerType = document.getElementById('ownerType').value.trim() || 'User';
-  const product = document.getElementById('product').value.trim() || 'kit-naka';
-
-  if(!ownerId){
-    setState('warn', 'INPUT KURANG', 'Isi Owner ID dulu sebelum cek.');
-    return;
-  }
-
-  checkBtn.disabled = true;
-  setState('warn', 'MENGECEK...', 'Menghubungi server lisensi.');
-
+async function verifyLicense(){
+  const ownerId=els.ownerId.value.trim();const ownerType=els.ownerType.value;const product=els.product.value.trim()||'kit-naka';
+  if(!ownerId){setState('warn','INPUT KURANG','Isi Owner ID terlebih dahulu.');els.ownerId.focus();showToast('Owner ID wajib diisi.');return}
+  localStorage.setItem(FORM_KEY,JSON.stringify({ownerId,ownerType,product}));
+  setLoading(true);setState('warn','MENGECEK...','Menghubungi server lisensi dan memvalidasi data.');setDot($('serverDot'),'warn');setText('serverLabel','Menghubungi API');
+  const startedAt=new Date();const started=performance.now();const requestId=makeRequestId();
+  updateTimeline([{state:'done',title:'Input divalidasi',detail:`Owner ${ownerType}: ${ownerId}`,time:formatTime(startedAt)},{title:'Menghubungi server',detail:LICENSE_URL,time:formatTime(startedAt)}]);
   try{
-    const res = await fetch(LICENSE_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ownerId, ownerType, product })
-    });
+    const res=await fetch(LICENSE_URL,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({ownerId,ownerType,product})});
+    const text=await res.text();let data;try{data=JSON.parse(text)}catch{data={raw:text}}
+    renderResult(data,{ok:res.ok,status:res.status,duration:Math.round(performance.now()-started),startedAt,checkedAt:new Date(),requestId,contentType:res.headers.get('content-type')});
+  }catch(error){
+    const checkedAt=new Date();const duration=Math.round(performance.now()-started);const data={error:String(error),endpoint:LICENSE_URL};latestData=data;els.rawOutput.textContent=JSON.stringify(data,null,2);
+    setState('bad','TIDAK TERHUBUNG','Gagal terhubung ke server lisensi. Periksa jaringan, endpoint, atau konfigurasi CORS.');setDot($('serverDot'),'bad');setText('serverLabel','API tidak terhubung');
+    els.lastCheck.textContent='Terakhir: '+formatTime(checkedAt);els.httpStatus.textContent='HTTP: NETWORK';els.requestId.textContent='Request: '+requestId;
+    setText('metricStatus','ERROR');setText('metricStatusHint','Network / CORS');setText('metricPing',duration+' ms');setText('metricPingHint','Request gagal');
+    setDot($('healthApiDot'),'bad');setText('healthApiText','Browser tidak dapat menjangkau endpoint.');setDot($('healthResponseDot'),'bad');setText('healthResponseText','Tidak ada respons HTTP.');setDot($('healthSignatureDot'),'warn');setText('healthSignatureText','Tidak dapat melakukan verifikasi signature.');
+    updateTimeline([{state:'done',title:'Input divalidasi',detail:`Owner ${ownerType}: ${ownerId}`,time:formatTime(startedAt)},{state:'fail',title:'Koneksi gagal',detail:String(error),time:formatTime(checkedAt)}]);
+    saveHistory({ownerId,ownerType,product,valid:null,status:'NETWORK',duration,checkedAt:checkedAt.toISOString(),message:String(error)});
+  }finally{setLoading(false)}
+}
 
-    const text = await res.text();
-    let data;
-    try{ data = JSON.parse(text); } catch(e){ data = { raw: text }; }
+function loadForm(){try{const form=JSON.parse(localStorage.getItem(FORM_KEY)||'null');if(form){els.ownerId.value=form.ownerId||'';els.ownerType.value=form.ownerType||'User';els.product.value=form.product||'kit-naka'}}catch{}}
+function setupTabs(){document.querySelectorAll('.tab-btn').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active',b===btn));document.querySelectorAll('.tab-panel').forEach(p=>p.classList.toggle('active',p.id===btn.dataset.tab))}))}
+function setupCopyButtons(){document.querySelectorAll('[data-copy-target]').forEach(btn=>btn.addEventListener('click',async()=>{const value=$(btn.dataset.copyTarget).textContent;await navigator.clipboard.writeText(value);showToast('Berhasil disalin.')}))}
+function setAutoRefresh(enabled){clearInterval(autoTimer);autoTimer=null;if(enabled){autoTimer=setInterval(()=>{if(els.ownerId.value.trim()&&!els.checkBtn.disabled)verifyLicense()},30000);showToast('Auto verify aktif setiap 30 detik.')}else showToast('Auto verify dinonaktifkan.')}
 
-    rawOutput.textContent = JSON.stringify(data, null, 2);
-    lastCheck.textContent = 'terakhir dicek: ' + fmtTime(new Date());
+els.checkBtn.addEventListener('click',verifyLicense);
+els.resetBtn.addEventListener('click',()=>{resetDashboard(false);showToast('Dashboard direset.');});
+els.ownerId.addEventListener('keydown',e=>{if(e.key==='Enter')verifyLicense()});
+els.autoRefresh.addEventListener('change',()=>setAutoRefresh(els.autoRefresh.checked));
+$('clearHistoryBtn').addEventListener('click',()=>{localStorage.removeItem(HISTORY_KEY);renderHistory();showToast('Riwayat dihapus.');});
+$('copyJsonBtn').addEventListener('click',async()=>{await navigator.clipboard.writeText(els.rawOutput.textContent);showToast('JSON disalin.');});
+$('downloadJsonBtn').addEventListener('click',()=>{const payload=latestData||{message:'Belum ada data'};const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`kitnaka-verification-${Date.now()}.json`;a.click();URL.revokeObjectURL(url);showToast('File JSON dibuat.');});
 
-    if(!res.ok){
-      setState('bad', 'GAGAL', 'Server merespons dengan error (' + res.status + ').');
-    } else if(data.valid === true){
-      setState('ok', 'VALID', 'Lisensi aktif dan terverifikasi.');
-    } else if(data.valid === false){
-      setState('bad', 'TIDAK VALID', 'Server menyatakan lisensi ini tidak valid.');
-    } else {
-      setState('warn', 'RESPON TAK DIKENAL', 'Server membalas, tapi field "valid" tidak ditemukan.');
-    }
-  } catch(err){
-    rawOutput.textContent = String(err);
-    lastCheck.textContent = 'terakhir dicek: ' + fmtTime(new Date());
-    setState('bad', 'TIDAK TERHUBUNG', 'Gagal konek ke server lisensi (jaringan/CORS).');
-  } finally {
-    checkBtn.disabled = false;
-  }
-});
+setupTabs();setupCopyButtons();loadForm();renderHistory();
 </script>
-
 </body>
 </html>
