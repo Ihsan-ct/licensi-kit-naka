@@ -69,6 +69,8 @@
   .status-pill.idle{ color:var(--idle); }
   .status-pill.offline .d{ background:var(--offline); }
   .status-pill.offline{ color:var(--offline); }
+  .status-pill.never .d{ background:var(--text-dim); }
+  .status-pill.never{ color:var(--text-dim); }
   @keyframes pulse{ 0%,100%{ opacity:1; } 50%{ opacity:0.35; } }
 
   .map-name{ font-weight:600; }
@@ -147,6 +149,7 @@
     <button class="filter-btn" data-filter="online">Online</button>
     <button class="filter-btn" data-filter="issue">Bermasalah</button>
     <button class="refresh-btn" id="refreshBtn">↻ Refresh</button>
+    <button class="refresh-btn" id="addBtn" style="color:var(--accent);border-color:var(--accent)">+ Tambah Lisensi</button>
   </div>
 
   <table>
@@ -182,14 +185,85 @@
 </div>
 
 <script>
-const API_URL = "https://kitnaka-license-api.vercel.app/api/installations";
+const API_URL = "https://kitnaka-license-api.vercel.app/api/licenses";
 
 let rawData = [];
 let currentFilter = "all";
 let searchTerm = "";
+let adminSecret = sessionStorage_safe_get();
+
+function sessionStorage_safe_get(){
+  try { return sessionStorage.getItem('kn_admin_secret') || ''; } catch(e){ return ''; }
+}
+function sessionStorage_safe_set(v){
+  try { sessionStorage.setItem('kn_admin_secret', v); } catch(e){}
+}
+
+function ensureAdminSecret(){
+  if(adminSecret) return adminSecret;
+  const val = prompt("Masukkan Admin Secret (ADMIN_SECRET) untuk melakukan aksi ini:");
+  if(val){
+    adminSecret = val;
+    sessionStorage_safe_set(val);
+  }
+  return adminSecret;
+}
+
+async function addLicense(){
+  const ownerId = prompt("Owner ID (UserId/GroupId Roblox):");
+  if(!ownerId) return;
+  const ownerType = (prompt("Owner Type — ketik 'User' atau 'Group':", "User") || "User").trim();
+  const product = (prompt("Nama product:", "kit-naka") || "kit-naka").trim();
+
+  const secret = ensureAdminSecret();
+  if(!secret) return;
+
+  try{
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-admin-secret': secret },
+      body: JSON.stringify({ ownerId: Number(ownerId), ownerType, product, status: 'active' })
+    });
+    const json = await res.json();
+    if(!res.ok){
+      if(res.status === 401){ adminSecret=''; sessionStorage_safe_set(''); }
+      showToast('Gagal: ' + (json.error || res.status));
+      return;
+    }
+    showToast('Lisensi baru ditambahkan');
+    fetchData();
+  }catch(err){
+    showToast('Gagal: ' + err.message);
+  }
+}
+
+async function deleteLicense(row){
+  if(!confirm(`Hapus lisensi untuk owner ${row.owner_id} (${row.product})? Tindakan ini tidak bisa dibatalkan.`)) return;
+
+  const secret = ensureAdminSecret();
+  if(!secret) return;
+
+  try{
+    const res = await fetch(API_URL, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', 'x-admin-secret': secret },
+      body: JSON.stringify({ ownerId: row.owner_id, ownerType: row.owner_type, product: row.product })
+    });
+    const json = await res.json();
+    if(!res.ok){
+      if(res.status === 401){ adminSecret=''; sessionStorage_safe_set(''); }
+      showToast('Gagal: ' + (json.error || res.status));
+      return;
+    }
+    showToast('Lisensi dihapus');
+    fetchData();
+  }catch(err){
+    showToast('Gagal: ' + err.message);
+  }
+}
 
 function computeStatus(lastSeenAt){
-  if(!lastSeenAt) return "offline";
+  if(!lastSeenAt) return "never";
   const diffMs = Date.now() - new Date(lastSeenAt).getTime();
   const min = diffMs / 60000;
   if(min < 2) return "online";
@@ -216,7 +290,28 @@ function showToast(msg){
 }
 
 function copyText(text, label){
-  navigator.clipboard.writeText(String(text)).then(()=> showToast(label + " disalin"));
+  const value = String(text ?? '');
+  // navigator.clipboard butuh secure context (https) dan bisa gagal diam-diam
+  // di beberapa browser/embed -- fallback manual supaya tombol tetap kerja.
+  const fallback = () => {
+    const ta = document.createElement('textarea');
+    ta.value = value;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch(e) {}
+    document.body.removeChild(ta);
+  };
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(value).then(
+      ()=> showToast(label + " disalin"),
+      ()=> { fallback(); showToast(label + " disalin"); }
+    );
+  } else {
+    fallback();
+    showToast(label + " disalin");
+  }
 }
 
 function openDetail(row){
@@ -228,7 +323,7 @@ function openDetail(row){
     ["Owner ID", row.owner_id],
     ["Owner Type", row.owner_type],
     ["Product", row.product],
-    ["Status Lisensi", row.license_status],
+    ["Status Lisensi", row.status],
     ["Kadaluarsa", row.expires_at ? new Date(row.expires_at).toLocaleString('id-ID') : "Tidak ada"],
     ["Versi Kit", row.system_version || "—"],
     ["Player Sekarang", (row.player_count ?? "—") + " / " + (row.max_players ?? "—")],
@@ -244,6 +339,8 @@ function openDetail(row){
   document.getElementById('modalBg').classList.add('show');
 }
 
+let visibleRows = []; // rows currently rendered, indexable by data-idx for the delegated click handler
+
 function render(){
   const tbody = document.getElementById('tableBody');
   const q = searchTerm.trim().toLowerCase();
@@ -255,7 +352,7 @@ function render(){
     }
     const status = computeStatus(r.last_seen_at);
     if(currentFilter === 'online' && status !== 'online') return false;
-    if(currentFilter === 'issue' && !(r.license_status !== 'active' || status === 'offline')) return false;
+    if(currentFilter === 'issue' && !(r.status !== 'active' || status === 'offline')) return false;
     return true;
   });
 
@@ -270,30 +367,37 @@ function render(){
   document.getElementById('statTotal').textContent = rawData.length;
 
   document.getElementById('emptyState').style.display = rows.length ? 'none' : 'block';
+  visibleRows = rows;
 
-  tbody.innerHTML = rows.map(r=>{
+  // Escape untuk teks yang ditaruh di dalam HTML (bukan atribut) -- mencegah
+  // nama map dengan karakter <, >, &, dst merusak markup.
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({
+    '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
+  }[c]));
+
+  tbody.innerHTML = rows.map((r, idx)=>{
     const status = computeStatus(r.last_seen_at);
-    const licBadgeClass = r.license_status === 'active' ? 'active' : (r.license_status === 'revoked' ? 'revoked' : 'unknown');
-    const robloxUrl = r.place_id ? `https://www.roblox.com/games/${r.place_id}` : '#';
+    const licBadgeClass = r.status === 'active' ? 'active' : (r.status === 'revoked' ? 'revoked' : 'unknown');
     return `
       <tr>
         <td data-label="Map">
-          <div class="map-name">${r.place_name || r.game_name || 'Tanpa nama'}</div>
-          <div class="map-sub">${r.product || ''} · Place ${r.place_id ?? '—'}</div>
+          <div class="map-name">${esc(r.place_name || r.game_name || 'Tanpa nama')}</div>
+          <div class="map-sub">${esc(r.product || '')} · Place ${esc(r.place_id ?? '—')}</div>
         </td>
-        <td data-label="Owner" class="mono">${r.owner_id}<br/><span style="color:var(--text-dim)">${r.owner_type}</span></td>
-        <td data-label="Lisensi"><span class="badge ${licBadgeClass}">${(r.license_status||'unknown').toUpperCase()}</span></td>
-        <td data-label="Player" class="mono">${r.player_count ?? '—'} / ${r.max_players ?? '—'}</td>
+        <td data-label="Owner" class="mono">${esc(r.owner_id)}<br/><span style="color:var(--text-dim)">${esc(r.owner_type)}</span></td>
+        <td data-label="Lisensi"><span class="badge ${licBadgeClass}">${esc((r.status||'unknown').toUpperCase())}</span></td>
+        <td data-label="Player" class="mono">${esc(r.player_count ?? '—')} / ${esc(r.max_players ?? '—')}</td>
         <td data-label="Status">
-          <span class="status-pill ${status}"><span class="d"></span>${status}</span>
+          <span class="status-pill ${status}"><span class="d"></span>${status === 'never' ? 'belum connect' : status}</span>
         </td>
-        <td data-label="Terakhir Online" class="mono">${timeAgo(r.last_seen_at)}</td>
+        <td data-label="Terakhir Online" class="mono">${esc(r.last_seen_at ? timeAgo(r.last_seen_at) : '—')}</td>
         <td data-label="Aksi">
           <div class="actions">
-            <button class="act-btn" onclick="window.open('${robloxUrl}','_blank')">Open</button>
-            <button class="act-btn" onclick='copyText(${JSON.stringify(String(r.place_id))}, "Place ID")'>Place ID</button>
-            <button class="act-btn" onclick='copyText(${JSON.stringify(String(r.universe_id))}, "Universe ID")'>Universe ID</button>
-            <button class="act-btn" onclick='openDetail(${JSON.stringify(r).replace(/'/g,"&apos;")})'>Detail</button>
+            <button class="act-btn" data-action="open" data-idx="${idx}">Open</button>
+            <button class="act-btn" data-action="copy-place" data-idx="${idx}">Place ID</button>
+            <button class="act-btn" data-action="copy-universe" data-idx="${idx}">Universe ID</button>
+            <button class="act-btn" data-action="detail" data-idx="${idx}">Detail</button>
+            <button class="act-btn" data-action="delete" data-idx="${idx}" style="color:var(--danger);border-color:rgba(248,113,113,0.3)">Hapus</button>
           </div>
         </td>
       </tr>
@@ -301,12 +405,47 @@ function render(){
   }).join('');
 }
 
+// Event delegation: satu listener di tbody menangani semua tombol aksi,
+// baik yang sudah ada maupun yang baru dirender ulang -- tidak ada lagi
+// data ditempel langsung ke atribut HTML (rawan rusak/silent-fail).
+document.getElementById('tableBody').addEventListener('click', (e)=>{
+  const btn = e.target.closest('button[data-action]');
+  if(!btn) return;
+  const row = visibleRows[Number(btn.dataset.idx)];
+  if(!row) return;
+
+  switch(btn.dataset.action){
+    case 'open': {
+      if(row.place_id){
+        window.open(`https://www.roblox.com/games/${row.place_id}`, '_blank');
+      } else {
+        showToast('Place ID tidak tersedia');
+      }
+      break;
+    }
+    case 'copy-place':
+      copyText(row.place_id, 'Place ID');
+      break;
+    case 'copy-universe':
+      copyText(row.universe_id, 'Universe ID');
+      break;
+    case 'detail':
+      openDetail(row);
+      break;
+    case 'delete':
+      deleteLicense(row);
+      break;
+  }
+});
+
+document.getElementById('addBtn').addEventListener('click', addLicense);
+
 async function fetchData(){
   document.getElementById('lastRefresh').textContent = "memuat…";
   try{
     const res = await fetch(API_URL);
     const json = await res.json();
-    rawData = json.installations || [];
+    rawData = json.licenses || [];
     document.getElementById('lastRefresh').textContent = "Terakhir refresh: " + new Date().toLocaleTimeString('id-ID');
     render();
   }catch(err){
