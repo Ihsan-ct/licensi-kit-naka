@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#07111f">
-<title>Kit Naka — License Dashboard</title>
+<title>Kit Naka — License Dashboard v2.0</title>
 <style>
   :root{
     --bg:#07111f;
@@ -196,7 +196,7 @@
       <div class="logo">KN</div>
       <div>
         <h1>Kit Naka License Dashboard</h1>
-        <p id="urlLabel">kitnaka-license-api.vercel.app/verify</p>
+        <p id="urlLabel">kitnaka-license-api.vercel.app/api/verify</p>
       </div>
     </div>
     <div class="top-actions">
@@ -314,7 +314,8 @@
 
 <script>
 'use strict';
-const LICENSE_URL = 'https://kitnaka-license-api.vercel.app/verify';
+// ✅ URL DIPERBAIKI MENJADI /api/verify
+const LICENSE_URL = 'https://kitnaka-license-api.vercel.app/api/verify';
 const HISTORY_KEY = 'kitnaka_license_history_v2';
 const FORM_KEY = 'kitnaka_license_form_v2';
 let latestData = null;
