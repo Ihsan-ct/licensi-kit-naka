@@ -1,27 +1,97 @@
 'use client';
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
-import { Activity, Bell, Boxes, FileClock, KeyRound, LayoutDashboard, LogOut, RefreshCw, Search, ShieldAlert, Users } from 'lucide-react';
+import { FormEvent, useEffect, useState } from 'react';
 
-type Summary={licenses:number;active:number;online:number;installations:number;illegal:number;threats:number;critical:number;products:number};
-type Payload={rows:any[];summary:Summary;notifications:any[];warnings:any[];pagination:{page:number;pages:number;total:number;limit:number}};
-const scopes=[['overview','Overview',LayoutDashboard],['licenses','Licenses',KeyRound],['installations','Installations',Boxes],['illegal','Threats',ShieldAlert],['products','Products',Activity],['audit','Audit Log',FileClock]] as const;
+export default function Dashboard() {
+  const [secret, setSecret] = useState('');
+  const [token, setToken] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-export default function Dashboard(){
- const [token,setToken]=useState(''); const [scope,setScope]=useState('overview');
- const [data,setData]=useState<Payload|null>(null); const [loading,setLoading]=useState(false); const [error,setError]=useState(''); const [query,setQuery]=useState(''); const [page,setPage]=useState(1);
- useEffect(()=>{try{setToken(window.sessionStorage.getItem('naka_token')||'')}catch{setToken('')}},[]);
- const request=useCallback(async(s=scope,p=page)=>{if(!token)return;setLoading(true);setError('');try{const r=await fetch(`/api/admin-data?scope=${encodeURIComponent(s)}&page=${p}&limit=25&q=${encodeURIComponent(query)}`,{headers:{Authorization:`Bearer ${token}`},cache:'no-store'});const j=await r.json();if(r.status===401){try{sessionStorage.removeItem('naka_token')}catch{}setToken('');throw new Error('Sesi berakhir, silakan login kembali')}if(!r.ok)throw new Error(j.error||'Gagal memuat data');setData(j)}catch(e){setError(e instanceof Error?e.message:'Terjadi kesalahan')}finally{setLoading(false)}},[token,scope,page,query]);
- useEffect(()=>{if(token)request()},[token,scope,page,request]);
- async function login(e:FormEvent<HTMLFormElement>){e.preventDefault();const form=e.currentTarget;const value=String(new FormData(form).get('admin-secret')||'').trim();if(!value){setError('Admin secret wajib diisi');return}setLoading(true);setError('');try{const r=await fetch('/api/admin-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({secret:value}),cache:'no-store'});const j=await r.json();if(!r.ok)throw new Error(j.error||'Login gagal');try{sessionStorage.setItem('naka_token',j.token)}catch{}setToken(j.token);form.reset()}catch(e){setError(e instanceof Error?e.message:'Login gagal')}finally{setLoading(false)}}
- function logout(){try{sessionStorage.removeItem('naka_token')}catch{}setToken('');setData(null)}
- const summary=data?.summary||{licenses:0,active:0,online:0,installations:0,illegal:0,threats:0,critical:0,products:0};
- const cards=useMemo(()=>[['Total Licenses',summary.licenses],['Active',summary.active],['Online Servers',summary.online],['Illegal Events',summary.illegal],['Critical Threats',summary.critical]], [summary]);
- if(!token)return <div style={{position:'fixed',inset:0,zIndex:2147483647,display:'grid',placeItems:'center',padding:24,background:'#050814',pointerEvents:'auto'}}><form onSubmit={login} noValidate style={{position:'relative',zIndex:2147483647,width:'min(430px,100%)',padding:30,border:'1px solid rgba(255,255,255,.12)',borderRadius:24,background:'#0b1426',boxShadow:'0 30px 100px rgba(0,0,0,.55)',pointerEvents:'auto'}}><div className="brand-lock"><span>N</span><div><b>NAKA CLOUD</b><small>ENTERPRISE LICENSE PLATFORM</small></div></div><h1 style={{fontSize:32,margin:'34px 0 8px'}}>Welcome back</h1><p style={{color:'#8290a8',lineHeight:1.6,marginBottom:24}}>Masuk ke pusat kontrol lisensi, instalasi, keamanan, dan audit.</p><label htmlFor="admin-secret" style={{display:'block',fontSize:12,color:'#a9b7cb',marginBottom:8}}>Admin secret</label><input id="admin-secret" name="admin-secret" type="password" placeholder="Masukkan ADMIN_SECRET" autoComplete="current-password" tabIndex={0} disabled={false} readOnly={false} style={{display:'block',position:'relative',zIndex:2147483647,width:'100%',height:48,border:'1px solid #334155',background:'#020617',color:'#fff',WebkitTextFillColor:'#fff',borderRadius:12,padding:'0 14px',outline:'none',pointerEvents:'auto',cursor:'text',userSelect:'text',touchAction:'manipulation',caretColor:'#fff'}}/><button type="submit" disabled={loading} style={{position:'relative',zIndex:2147483647,width:'100%',marginTop:14,padding:13,border:0,borderRadius:12,background:'#4f8cff',color:'#fff',fontWeight:700,pointerEvents:'auto',cursor:'pointer'}}>{loading?'Memverifikasi…':'Secure login'}</button>{error&&<div className="error-box" role="alert">{error}</div>}</form></div>;
- return <div className="shell"><aside><div className="brand-lock"><span>N</span><div><b>NAKA CLOUD</b><small>COMMAND CENTER</small></div></div><nav>{scopes.map(([id,label,Icon])=><button key={id} className={scope===id?'active':''} onClick={()=>{setScope(id);setPage(1)}}><Icon size={17}/>{label}{id==='illegal'&&summary.critical>0?<em>{summary.critical}</em>:null}</button>)}</nav><div className="side-status"><i/>API & Database protected</div></aside><main><header><div><small>Enterprise workspace</small><h1>{scopes.find(x=>x[0]===scope)?.[1]}</h1></div><div className="top-actions"><button className="icon" title="Notifications"><Bell size={18}/><span>{data?.notifications?.length||0}</span></button><button className="icon" onClick={()=>request()} title="Refresh"><RefreshCw size={18}/></button><button className="logout" onClick={logout}><LogOut size={16}/>Logout</button></div></header>{data?.warnings?.length?<div className="warning-box">Database warning: {data.warnings.map(x=>x.code).join(', ')}</div>:null}{error&&<div className="error-box">{error}</div>}{scope==='overview'?<><section className="hero"><div><small>NAKA SECURITY ENGINE</small><h2>All licensing operations in one secure workspace.</h2><p>Monitor valid customers, active Roblox servers, legacy unauthorized access, critical threats, versions, and admin actions.</p></div><div className="health"><b>{Math.max(0,100-summary.critical*4)}%</b><span>Security health</span></div></section><section className="kpis">{cards.map(([label,value])=><article key={label as string}><span>{label}</span><b>{value}</b></article>)}</section><section className="dashboard-grid"><article className="panel"><div className="panel-head"><h3>Recent alerts</h3><span>{data?.notifications?.length||0} events</span></div><div className="feed">{data?.notifications?.length?data.notifications.map((n:any,i:number)=><div className="feed-item" key={i}><i className={n.level}/><div><b>{n.title}</b><span>{n.detail}</span></div><time>{n.time?new Date(n.time).toLocaleString('id-ID'):'—'}</time></div>):<Empty text="Belum ada alert"/>}</div></article><article className="panel"><div className="panel-head"><h3>Platform status</h3></div><div className="status-list"><p><span>API</span><b>Operational</b></p><p><span>Licenses</span><b>{summary.active} active</b></p><p><span>Installations</span><b>{summary.installations}</b></p><p><span>Products</span><b>{summary.products}</b></p></div></article></section></>:<DataView scope={scope} data={data} loading={loading} query={query} setQuery={setQuery} reload={()=>request()} page={page} setPage={setPage}/>}</main></div>
+  useEffect(() => {
+    const saved = window.sessionStorage.getItem('naka_token');
+    if (saved) setToken(saved);
+  }, []);
+
+  async function handleLogin(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError('');
+
+    const cleanSecret = secret.trim();
+    if (!cleanSecret) {
+      setError('Admin secret wajib diisi.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await fetch('/api/admin-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ secret: cleanSecret }),
+      });
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.token) {
+        throw new Error(result.error || 'Login gagal. Periksa ADMIN_SECRET.');
+      }
+
+      window.sessionStorage.setItem('naka_token', result.token);
+      setToken(result.token);
+      setSecret('');
+    } catch (loginError) {
+      setError(loginError instanceof Error ? loginError.message : 'Login gagal.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function logout() {
+    window.sessionStorage.removeItem('naka_token');
+    setToken('');
+  }
+
+  if (!token) {
+    return (
+      <main className="login-page">
+        <form className="login-card" onSubmit={handleLogin}>
+          <div className="logo">N</div>
+          <p className="eyebrow">NAKA LICENSE CLOUD</p>
+          <h1>Admin Login</h1>
+          <p className="description">Masukkan ADMIN_SECRET untuk membuka dashboard.</p>
+
+          <label htmlFor="admin-secret">Admin secret</label>
+          <input
+            id="admin-secret"
+            name="admin-secret"
+            type="password"
+            value={secret}
+            onChange={(event) => setSecret(event.target.value)}
+            placeholder="Masukkan ADMIN_SECRET"
+            autoComplete="current-password"
+            autoFocus
+          />
+
+          <button type="submit" disabled={loading}>
+            {loading ? 'Memverifikasi…' : 'Masuk'}
+          </button>
+
+          {error ? <p className="error" role="alert">{error}</p> : null}
+        </form>
+      </main>
+    );
+  }
+
+  return (
+    <main className="dashboard-page">
+      <section className="dashboard-card">
+        <div>
+          <p className="eyebrow">NAKA LICENSE CLOUD</p>
+          <h1>Dashboard berhasil dibuka</h1>
+          <p className="description">Login dan penyimpanan sesi sudah bekerja.</p>
+        </div>
+        <button className="logout-button" type="button" onClick={logout}>Keluar</button>
+      </section>
+    </main>
+  );
 }
-
-function DataView({scope,data,loading,query,setQuery,reload,page,setPage}:any){const rows=data?.rows||[];return <section><div className="toolbar"><div className="search"><Search size={17}/><input value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>e.key==='Enter'&&reload()} placeholder="Cari owner, product, universe, IP…"/></div><button onClick={reload}>Search</button></div><article className="panel table-panel">{loading?<div className="loading">Loading encrypted workspace…</div>:rows.length?<table><thead><tr>{headers(scope).map(h=><th key={h}>{h}</th>)}</tr></thead><tbody>{rows.map((r:any,i:number)=><tr key={r.id||`${r.owner_id}-${i}`}>{cells(scope,r).map((c:any,j:number)=><td key={j}>{c}</td>)}</tr>)}</tbody></table>:<Empty text="Tidak ada data untuk filter ini"/>}<div className="pagination"><span>{data?.pagination?.total||0} records</span><div><button disabled={page<=1} onClick={()=>setPage((x:number)=>x-1)}>Previous</button><b>{page} / {data?.pagination?.pages||1}</b><button disabled={page>=data?.pagination?.pages} onClick={()=>setPage((x:number)=>x+1)}>Next</button></div></div></article></section>}
-function headers(s:string){return s==='licenses'?['Owner','Product','Status','Universe','Last Seen']:s==='installations'?['Map','Owner','Universe','Version','Last Seen']:s==='illegal'?['Risk','Reason','Owner','IP','Attempts','Last Seen']:s==='products'?['Product','Code','Latest','Minimum','Policy']:['Action','Target','Admin IP','Time']}
-function cells(s:string,r:any){if(s==='licenses')return [`${r.owner_type} ${r.owner_id}`,r.product,<Badge key="b" value={r.status}/>,r.universe_id||'Unbound',date(r.latest_installation?.last_seen_at)];if(s==='installations')return [r.place_name||r.game_name||'Unnamed',r.owner_id,r.universe_id||'—',r.system_version||'—',date(r.last_seen_at)];if(s==='illegal')return [<strong key="risk" className={r.risk_score>=70?'risk high':'risk'}>{r.risk_score||0}</strong>,r.reason||'UNKNOWN',r.owner_id||'—',r.ip_address||'Historical / unknown',r.attempt_count||1,date(r.last_seen_at)];if(s==='products')return [r.name,r.code,r.latest_version||'—',r.minimum_version||'—',<Badge key="policy" value={r.version_policy}/>];return [r.action,r.target||'—',r.admin_ip||'—',date(r.created_at)]}
-function Badge({value}:{value:string}){return <span className={`badge ${value}`}>{value||'unknown'}</span>};function Empty({text}:{text:string}){return <div className="empty"><Users size={28}/><b>{text}</b><span>Data akan muncul setelah sistem mulai merekam aktivitas.</span></div>};function date(v:any){return v?new Date(v).toLocaleString('id-ID'):'—'}
