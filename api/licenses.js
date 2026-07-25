@@ -147,11 +147,11 @@ export default async function handler(req, res) {
     if (!ownerId || !ownerType || !product) return res.status(400).json({ error: 'Owner ID, owner type, dan product wajib valid' });
 
     if (req.method === 'POST') {
-      const licenseKey = clean(body.licenseKey, 200);
+      const licenseKey = clean(body.licenseKey, 200) || `NAKA-${crypto.randomUUID().replaceAll('-', '').toUpperCase()}`;
       const status = ['active', 'pending', 'suspended', 'revoked'].includes(body.status) ? body.status : 'active';
       const universeId = body.universeId ? validId(body.universeId) : null;
       const expiresAt = body.expiresAt ? new Date(body.expiresAt) : null;
-      if (!licenseKey || licenseKey.length < 16) return res.status(400).json({ error: 'License key minimal 16 karakter' });
+      if (licenseKey.length < 16) return res.status(400).json({ error: 'License key tidak valid' });
       if (expiresAt && Number.isNaN(expiresAt.getTime())) return res.status(400).json({ error: 'Tanggal kedaluwarsa tidak valid' });
 
       const created = await db(base, key, 'licenses?on_conflict=owner_id,owner_type,product', {
