@@ -10,9 +10,8 @@ local VERIFY_URL = "https://kitnaka-license-api.vercel.app/api/verify"
 local PRODUCT = "kit-naka"
 local SYSTEM_VERSION = "2.0.0"
 
--- Ganti dengan key unik yang dibuat dari dashboard untuk pembeli ini.
--- Jangan simpan di ReplicatedStorage atau LocalScript.
-local LICENSE_KEY = "NAKA-GANTI-DENGAN-KEY-DARI-DASHBOARD"
+-- Akses diberikan lewat status lisensi aktif di dashboard.
+-- Tidak ada key manual di game.
 
 local function getOwnerIdentity()
 	local creatorType = game.CreatorType == Enum.CreatorType.Group and "Group" or "User"
@@ -25,7 +24,6 @@ function LicenseClient.Verify()
 		ownerId = ownerId,
 		ownerType = ownerType,
 		product = PRODUCT,
-		licenseKey = LICENSE_KEY,
 		placeId = tostring(game.PlaceId),
 		universeId = tostring(game.GameId),
 		placeName = game.Name,
@@ -40,13 +38,13 @@ function LicenseClient.Verify()
 
 	local success, response = pcall(function()
 		return HttpService:RequestAsync({
-		Url = VERIFY_URL,
-		Method = "POST",
-		Headers = {
-			["Content-Type"] = "application/json",
-		},
-		Body = HttpService:JSONEncode(payload),
-	})
+			Url = VERIFY_URL,
+			Method = "POST",
+			Headers = {
+				["Content-Type"] = "application/json",
+			},
+			Body = HttpService:JSONEncode(payload),
+		})
 	end)
 
 	if not success then
