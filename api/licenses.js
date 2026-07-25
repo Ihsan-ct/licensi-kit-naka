@@ -1,3 +1,5 @@
+import { requireAdmin } from './_lib/admin.js';
+
 const buckets = globalThis.__nakaAdminRateBuckets || new Map();
 globalThis.__nakaAdminRateBuckets = buckets;
 
@@ -46,23 +48,13 @@ function cors(req, res) {
     res.setHeader('Access-Control-Allow-Origin', configured || 'null');
   }
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,x-admin-secret');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
   res.setHeader('Cache-Control', 'no-store');
 }
 
-function auth(req) {
-  const expected = process.env.ADMIN_SECRET;
-  const received = req.headers['x-admin-secret'];
-  return Boolean(expected && received && received === expected);
-}
-
 async function safeRead(base, key, path, warningCode, warnings) {
-  try {
-    return await db(base, key, path);
-  } catch (error) {
-    warnings.push({ code: warningCode, message: error.message });
-    return [];
-  }
+  try { return await db(base, key, path); }
+  catch (error) { warnings.push({ code: warningCode, message: error.message }); return []; }
 }
 
 function installationIdentity(row) {
@@ -73,7 +65,8 @@ export default async function handler(req, res) {
   cors(req, res);
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (limited(`admin:${ipOf(req)}`)) return res.status(429).json({ error: 'Terlalu banyak request' });
-  if (!auth(req)) return res.status(401).json({ error: 'ADMIN_SECRET salah atau belum diisi' });
+  try { await requireAdmin(req); }
+  catch (error) { return res.status(error.status || 401).json({ error: error.message || 'Sesi admin tidak valid' }); }
 
   const base = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_KEY;
@@ -88,9 +81,7 @@ export default async function handler(req, res) {
 
       const installGroups = {};
       const licenseKeys = new Set();
-      for (const lic of licenses) {
-        licenseKeys.add(`${lic.owner_id}:${lic.owner_type}:${lic.product}`);
-      }
+      for (const lic of licenses) licenseKeys.add(`${lic.owner_id}:${lic.owner_type}:${lic.product}`);
       for (const inst of installations) {
         const groupKey = `${inst.owner_id}:${inst.owner_type || 'User'}:${inst.product}`;
         (installGroups[groupKey] ||= []).push(inst);
@@ -127,14 +118,10 @@ export default async function handler(req, res) {
         user_agent: row.user_agent, attempted_at: row.attempted_at, last_seen_at: row.attempted_at
       }));
 
-      // Data historis sebelum access_attempts dibuat: setiap installation yang tidak
-      // memiliki pasangan license dianggap akses lama tanpa izin. Data ini berasal
-      // dari installation monitor lama, sehingga IP dan alasan detail memang tidak tersedia.
       const loggedInstallationIds = new Set(attempts.map(installationIdentity));
       for (const inst of installations) {
         const groupKey = `${inst.owner_id}:${inst.owner_type || 'User'}:${inst.product}`;
-        if (licenseKeys.has(groupKey)) continue;
-        if (loggedInstallationIds.has(installationIdentity(inst))) continue;
+        if (licenseKeys.has(groupKey) || loggedInstallationIds.has(installationIdentity(inst))) continue;
         unauthorized.push({
           record_type: 'unauthorized', source: 'legacy_installation', status: 'unauthorized',
           owner_id: inst.owner_id, owner_type: inst.owner_type || 'User', product: inst.product,
@@ -148,7 +135,6 @@ export default async function handler(req, res) {
       }
 
       unauthorized.sort((a, b) => new Date(b.attempted_at || 0) - new Date(a.attempted_at || 0));
-
       const fatal = warnings.find((w) => w.code === 'LICENSES_READ_FAILED');
       if (fatal) return res.status(502).json({ error: 'Tabel licenses gagal dibaca', detail: fatal.message, warnings });
       return res.status(200).json({ licenses: merged, unauthorized, warnings });
