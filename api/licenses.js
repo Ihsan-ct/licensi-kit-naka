@@ -69,8 +69,8 @@ export default async function handler(req, res) {
   catch (error) { return res.status(error.status || 401).json({ error: error.message || 'Sesi admin tidak valid' }); }
 
   const base = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_KEY;
-  if (!base || !key) return res.status(500).json({ error: 'SUPABASE_URL atau SUPABASE_KEY belum dikonfigurasi' });
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY;
+  if (!base || !key) return res.status(500).json({ error: 'SUPABASE_URL atau SUPABASE_SERVICE_ROLE_KEY belum dikonfigurasi' });
 
   try {
     if (req.method === 'GET') {
