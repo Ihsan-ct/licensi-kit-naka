@@ -65,6 +65,10 @@ async function safeRead(base, key, path, warningCode, warnings) {
   }
 }
 
+function installationIdentity(row) {
+  return [row.owner_id || '', row.owner_type || 'User', row.product || '', row.place_id || '', row.universe_id || ''].join(':');
+}
+
 export default async function handler(req, res) {
   cors(req, res);
   if (req.method === 'OPTIONS') return res.status(204).end();
@@ -83,6 +87,10 @@ export default async function handler(req, res) {
       const attempts = await safeRead(base, key, 'access_attempts?select=*&order=attempted_at.desc&limit=500', 'ACCESS_ATTEMPTS_TABLE_MISSING', warnings);
 
       const installGroups = {};
+      const licenseKeys = new Set();
+      for (const lic of licenses) {
+        licenseKeys.add(`${lic.owner_id}:${lic.owner_type}:${lic.product}`);
+      }
       for (const inst of installations) {
         const groupKey = `${inst.owner_id}:${inst.owner_type || 'User'}:${inst.product}`;
         (installGroups[groupKey] ||= []).push(inst);
@@ -112,12 +120,34 @@ export default async function handler(req, res) {
       }
 
       const unauthorized = attempts.map((row) => ({
-        record_type: 'unauthorized', status: 'unauthorized', owner_id: row.owner_id,
+        record_type: 'unauthorized', source: 'security_log', status: 'unauthorized', owner_id: row.owner_id,
         owner_type: row.owner_type, product: row.product, place_id: row.place_id,
         universe_id: row.universe_id, place_name: row.place_name, game_name: row.game_name,
         system_version: row.system_version, reason: row.reason, ip_address: row.ip_address,
         user_agent: row.user_agent, attempted_at: row.attempted_at, last_seen_at: row.attempted_at
       }));
+
+      // Data historis sebelum access_attempts dibuat: setiap installation yang tidak
+      // memiliki pasangan license dianggap akses lama tanpa izin. Data ini berasal
+      // dari installation monitor lama, sehingga IP dan alasan detail memang tidak tersedia.
+      const loggedInstallationIds = new Set(attempts.map(installationIdentity));
+      for (const inst of installations) {
+        const groupKey = `${inst.owner_id}:${inst.owner_type || 'User'}:${inst.product}`;
+        if (licenseKeys.has(groupKey)) continue;
+        if (loggedInstallationIds.has(installationIdentity(inst))) continue;
+        unauthorized.push({
+          record_type: 'unauthorized', source: 'legacy_installation', status: 'unauthorized',
+          owner_id: inst.owner_id, owner_type: inst.owner_type || 'User', product: inst.product,
+          place_id: inst.place_id, universe_id: inst.universe_id, place_name: inst.place_name,
+          game_name: inst.game_name, system_version: inst.system_version,
+          reason: 'LEGACY_NO_LICENSE', ip_address: null, user_agent: null,
+          attempted_at: inst.last_seen_at || inst.first_seen_at || null,
+          first_seen_at: inst.first_seen_at || null,
+          last_seen_at: inst.last_seen_at || inst.first_seen_at || null
+        });
+      }
+
+      unauthorized.sort((a, b) => new Date(b.attempted_at || 0) - new Date(a.attempted_at || 0));
 
       const fatal = warnings.find((w) => w.code === 'LICENSES_READ_FAILED');
       if (fatal) return res.status(502).json({ error: 'Tabel licenses gagal dibaca', detail: fatal.message, warnings });
