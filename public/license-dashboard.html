@@ -2,472 +2,53 @@
 <html lang="id">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Kit Naka — Installation Monitor</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Kit Naka — License Security</title>
 <style>
-  :root{
-    --bg: #0b0f0e;
-    --panel: #111714;
-    --panel-line: #1e2622;
-    --text: #dce7e0;
-    --text-dim: #7f9189;
-    --mono: 'IBM Plex Mono', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-    --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    --accent: #5eead4;
-    --online: #4ade80;
-    --idle: #facc15;
-    --offline: #64748b;
-    --danger: #f87171;
-  }
-  *{ box-sizing: border-box; }
-  html,body{ margin:0; padding:0; background:var(--bg); color:var(--text); font-family:var(--sans); }
-
-  .wrap{ max-width: 1180px; margin: 0 auto; padding: 40px 24px 80px; }
-
-  header{ display:flex; align-items:flex-end; justify-content:space-between; gap:24px; margin-bottom:32px; flex-wrap:wrap; }
-  .brand{ display:flex; align-items:baseline; gap:12px; }
-  .brand .dot{ width:9px;height:9px;border-radius:50%; background:var(--accent); box-shadow:0 0 12px var(--accent); }
-  h1{ font-family: var(--mono); font-size: 20px; font-weight:600; letter-spacing:-0.01em; margin:0; }
-  .sub{ font-family: var(--mono); font-size:12px; color:var(--text-dim); margin-top:4px; }
-
-  .stats{ display:flex; gap:0; border:1px solid var(--panel-line); border-radius:10px; overflow:hidden; }
-  .stat{ padding:10px 20px; border-right:1px solid var(--panel-line); text-align:center; }
-  .stat:last-child{ border-right:none; }
-  .stat .n{ font-family:var(--mono); font-size:18px; font-weight:600; }
-  .stat .l{ font-family:var(--mono); font-size:10px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.08em; margin-top:2px; }
-  .stat.on .n{ color:var(--online); }
-  .stat.idle .n{ color:var(--idle); }
-  .stat.off .n{ color:var(--offline); }
-
-  .toolbar{ display:flex; gap:10px; margin-bottom:16px; align-items:center; }
-  .toolbar input{
-    flex:1; background:var(--panel); border:1px solid var(--panel-line); border-radius:8px;
-    padding:10px 14px; color:var(--text); font-family:var(--mono); font-size:13px; outline:none;
-  }
-  .toolbar input:focus{ border-color:var(--accent); }
-  .refresh-btn, .filter-btn{
-    background:var(--panel); border:1px solid var(--panel-line); color:var(--text-dim);
-    font-family:var(--mono); font-size:12px; padding:10px 14px; border-radius:8px; cursor:pointer;
-  }
-  .refresh-btn:hover, .filter-btn:hover{ color:var(--text); border-color:var(--accent); }
-  .filter-btn.active{ color:var(--accent); border-color:var(--accent); }
-
-  table{ width:100%; border-collapse:collapse; }
-  thead th{
-    text-align:left; font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:0.08em;
-    color:var(--text-dim); padding:10px 14px; border-bottom:1px solid var(--panel-line);
-  }
-  tbody tr{ border-bottom:1px solid var(--panel-line); }
-  tbody tr:hover{ background: rgba(94,234,212,0.03); }
-  tbody td{ padding:14px; font-size:13px; vertical-align:middle; }
-
-  .status-pill{ display:inline-flex; align-items:center; gap:6px; font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:0.04em; }
-  .status-pill .d{ width:7px;height:7px;border-radius:50%; }
-  .status-pill.online .d{ background:var(--online); box-shadow:0 0 8px var(--online); animation:pulse 1.6s infinite; }
-  .status-pill.online{ color:var(--online); }
-  .status-pill.idle .d{ background:var(--idle); }
-  .status-pill.idle{ color:var(--idle); }
-  .status-pill.offline .d{ background:var(--offline); }
-  .status-pill.offline{ color:var(--offline); }
-  .status-pill.never .d{ background:var(--text-dim); }
-  .status-pill.never{ color:var(--text-dim); }
-  @keyframes pulse{ 0%,100%{ opacity:1; } 50%{ opacity:0.35; } }
-
-  .map-name{ font-weight:600; }
-  .map-sub{ font-family:var(--mono); font-size:11px; color:var(--text-dim); margin-top:2px; }
-
-  .mono{ font-family:var(--mono); font-size:12px; color:var(--text-dim); }
-  .badge{ font-family:var(--mono); font-size:10px; padding:3px 8px; border-radius:5px; border:1px solid var(--panel-line); color:var(--text-dim); }
-  .badge.active{ color:var(--online); border-color: rgba(74,222,128,0.3); }
-  .badge.revoked{ color:var(--danger); border-color: rgba(248,113,113,0.3); }
-  .badge.unknown{ color:var(--text-dim); }
-
-  .actions{ display:flex; gap:6px; }
-  .act-btn{
-    background:transparent; border:1px solid var(--panel-line); color:var(--text-dim);
-    font-family:var(--mono); font-size:11px; padding:6px 10px; border-radius:6px; cursor:pointer;
-  }
-  .act-btn:hover{ color:var(--accent); border-color:var(--accent); }
-
-  .empty{ text-align:center; padding:80px 20px; color:var(--text-dim); font-family:var(--mono); font-size:13px; }
-  .empty .big{ font-size:28px; margin-bottom:10px; }
-
-  .toast{
-    position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(12px);
-    background:var(--panel); border:1px solid var(--accent); color:var(--accent);
-    font-family:var(--mono); font-size:12px; padding:10px 18px; border-radius:8px;
-    opacity:0; pointer-events:none; transition:opacity 0.2s, transform 0.2s;
-  }
-  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
-
-  .modal-bg{
-    position:fixed; inset:0; background:rgba(0,0,0,0.6); display:none; align-items:center; justify-content:center; z-index:50;
-  }
-  .modal-bg.show{ display:flex; }
-  .modal{
-    background:var(--panel); border:1px solid var(--panel-line); border-radius:12px; padding:28px;
-    width:100%; max-width:460px; max-height:80vh; overflow:auto;
-  }
-  .modal h2{ font-family:var(--mono); font-size:15px; margin:0 0 16px; }
-  .modal .row{ display:flex; justify-content:space-between; gap:16px; padding:8px 0; border-bottom:1px solid var(--panel-line); font-size:12px; }
-  .modal .row .k{ color:var(--text-dim); font-family:var(--mono); }
-  .modal .row .v{ font-family:var(--mono); text-align:right; word-break:break-all; }
-  .modal-close{ margin-top:18px; width:100%; background:transparent; border:1px solid var(--panel-line); color:var(--text-dim); font-family:var(--mono); font-size:12px; padding:10px; border-radius:8px; cursor:pointer; }
-  .modal-close:hover{ color:var(--text); border-color:var(--accent); }
-
-  @media (max-width: 720px){
-    thead{ display:none; }
-    table, tbody, tr, td{ display:block; width:100%; }
-    tbody tr{ padding:14px 0; }
-    tbody td{ padding:4px 0; }
-    tbody td::before{ content: attr(data-label); display:block; font-family:var(--mono); font-size:10px; color:var(--text-dim); text-transform:uppercase; margin-bottom:2px; }
-  }
+:root{--bg:#080d12;--panel:#101821;--line:#22303d;--text:#e6edf3;--dim:#8ca0b3;--accent:#59d8ff;--ok:#4ade80;--warn:#facc15;--danger:#fb7185}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,Segoe UI,sans-serif}.wrap{max-width:1450px;margin:auto;padding:32px 22px 70px}header{display:flex;justify-content:space-between;gap:18px;align-items:flex-end;flex-wrap:wrap;margin-bottom:22px}h1{font-size:21px;margin:0}.sub,.mono{font-family:ui-monospace,Consolas,monospace;color:var(--dim);font-size:12px}.stats{display:flex;border:1px solid var(--line);border-radius:12px;overflow:hidden}.stat{padding:10px 18px;text-align:center;border-right:1px solid var(--line)}.stat:last-child{border:0}.stat b{display:block;font:700 19px ui-monospace}.stat span{font:10px ui-monospace;color:var(--dim);text-transform:uppercase}.danger b{color:var(--danger)}.ok b{color:var(--ok)}.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}.toolbar input{flex:1;min-width:220px;background:var(--panel);border:1px solid var(--line);color:var(--text);padding:10px 12px;border-radius:8px}.btn{background:var(--panel);border:1px solid var(--line);color:var(--dim);padding:9px 12px;border-radius:8px;cursor:pointer;font:12px ui-monospace}.btn:hover,.btn.active{border-color:var(--accent);color:var(--accent)}.btn.red{color:var(--danger)}.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:12px}table{width:100%;border-collapse:collapse;min-width:1100px}th{text-align:left;color:var(--dim);font:10px ui-monospace;text-transform:uppercase;padding:11px;border-bottom:1px solid var(--line)}td{padding:12px 11px;border-bottom:1px solid var(--line);font-size:12px;vertical-align:top}tr:last-child td{border-bottom:0}tr:hover{background:#ffffff05}.badge{display:inline-block;padding:3px 7px;border:1px solid var(--line);border-radius:5px;font:10px ui-monospace;text-transform:uppercase}.badge.active{color:var(--ok);border-color:#4ade8055}.badge.unauthorized,.badge.revoked{color:var(--danger);border-color:#fb718555}.badge.pending,.badge.suspended{color:var(--warn);border-color:#facc1555}.name{font-weight:700}.muted{color:var(--dim);margin-top:3px}.actions{display:flex;gap:5px;flex-wrap:wrap}.small{padding:5px 8px;font-size:10px}.empty{text-align:center;color:var(--dim);padding:55px}.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--accent);padding:10px 16px;border-radius:8px;display:none;z-index:20}.toast.show{display:block}.modal-bg{position:fixed;inset:0;background:#000b;display:none;align-items:center;justify-content:center;padding:20px;z-index:10}.modal-bg.show{display:flex}.modal{width:min(560px,100%);background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:22px}.modal h2{margin-top:0}.field{display:grid;grid-template-columns:150px 1fr;gap:12px;padding:8px 0;border-bottom:1px solid var(--line);font-size:12px}.field .k{color:var(--dim);font-family:ui-monospace}.field .v{word-break:break-all}.key-box{background:#05090d;border:1px solid var(--danger);padding:12px;border-radius:8px;font:12px ui-monospace;word-break:break-all;margin:12px 0}.notice{color:var(--warn);font-size:12px}.login{max-width:430px;margin:12vh auto;background:var(--panel);border:1px solid var(--line);padding:24px;border-radius:14px}.login input{width:100%;margin:12px 0;background:var(--bg);border:1px solid var(--line);color:var(--text);padding:12px;border-radius:8px}@media(max-width:700px){.stats{width:100%;overflow:auto}.stat{min-width:90px}.wrap{padding:20px 12px}.toolbar input{width:100%}}
 </style>
 </head>
 <body>
-<div class="wrap">
-
-  <header>
-    <div>
-      <div class="brand">
-        <span class="dot"></span>
-        <h1>KIT NAKA — INSTALLATION MONITOR</h1>
-      </div>
-      <div class="sub" id="lastRefresh">memuat…</div>
-    </div>
-    <div class="stats">
-      <div class="stat on"><div class="n" id="statOnline">0</div><div class="l">Online</div></div>
-      <div class="stat idle"><div class="n" id="statIdle">0</div><div class="l">Idle</div></div>
-      <div class="stat off"><div class="n" id="statOffline">0</div><div class="l">Offline</div></div>
-      <div class="stat"><div class="n" id="statTotal">0</div><div class="l">Total Map</div></div>
-    </div>
-  </header>
-
-  <div class="toolbar">
-    <input id="search" placeholder="Cari nama map, owner ID, atau Place ID…" />
-    <button class="filter-btn active" data-filter="all">Semua</button>
-    <button class="filter-btn" data-filter="online">Online</button>
-    <button class="filter-btn" data-filter="issue">Bermasalah</button>
-    <button class="refresh-btn" id="refreshBtn">↻ Refresh</button>
-    <button class="refresh-btn" id="addBtn" style="color:var(--accent);border-color:var(--accent)">+ Tambah Lisensi</button>
-  </div>
-
-  <table>
-    <thead>
-      <tr>
-        <th>Map</th>
-        <th>Owner</th>
-        <th>Lisensi</th>
-        <th>Player</th>
-        <th>Status</th>
-        <th>Terakhir Online</th>
-        <th>Aksi</th>
-      </tr>
-    </thead>
-    <tbody id="tableBody"></tbody>
-  </table>
-
-  <div class="empty" id="emptyState" style="display:none">
-    <div class="big">◌</div>
-    Belum ada map yang terdeteksi.<br/>Map akan muncul otomatis begitu server pertama kali verify.
-  </div>
-
+<div id="loginView" class="login">
+  <h2>License Security Dashboard</h2>
+  <div class="sub">Masukkan ADMIN_SECRET untuk membuka data.</div>
+  <input id="secretInput" type="password" placeholder="ADMIN_SECRET" autocomplete="current-password" />
+  <button class="btn" id="loginBtn">Masuk</button>
 </div>
-
+<div id="app" class="wrap" hidden>
+<header><div><h1>KIT NAKA — LICENSE SECURITY</h1><div class="sub" id="lastRefresh">belum dimuat</div></div><div class="stats"><div class="stat ok"><b id="sActive">0</b><span>Aktif</span></div><div class="stat"><b id="sMaps">0</b><span>Map</span></div><div class="stat danger"><b id="sUnauthorized">0</b><span>Tanpa Lisensi</span></div><div class="stat"><b id="sTotal">0</b><span>Total Baris</span></div></div></header>
+<div class="toolbar">
+  <input id="search" placeholder="Cari owner, map, place, universe, alasan..." />
+  <button class="btn active filter" data-filter="all">Semua</button>
+  <button class="btn filter" data-filter="license">Ber-lisensi</button>
+  <button class="btn filter" data-filter="unauthorized">Tanpa Lisensi</button>
+  <button class="btn" id="refreshBtn">↻ Refresh</button>
+  <button class="btn" id="addBtn">+ Tambah Lisensi</button>
+  <button class="btn red" id="logoutBtn">Keluar</button>
+</div>
+<div class="table-wrap"><table><thead><tr><th>Tipe</th><th>Map / Produk</th><th>Owner</th><th>Universe / Place</th><th>Status / Alasan</th><th>Versi</th><th>Terakhir</th><th>IP</th><th>Aksi</th></tr></thead><tbody id="tbody"></tbody></table><div class="empty" id="empty" hidden>Tidak ada data.</div></div>
+</div>
 <div class="toast" id="toast"></div>
-
-<div class="modal-bg" id="modalBg">
-  <div class="modal">
-    <h2 id="modalTitle">Detail Map</h2>
-    <div id="modalBody"></div>
-    <button class="modal-close" id="modalClose">Tutup</button>
-  </div>
-</div>
-
+<div class="modal-bg" id="modalBg"><div class="modal"><h2 id="modalTitle">Detail</h2><div id="modalBody"></div><button class="btn" id="modalClose" style="width:100%;margin-top:15px">Tutup</button></div></div>
 <script>
-const API_URL = "https://kitnaka-license-api.vercel.app/api/licenses";
-
-let rawData = [];
-let currentFilter = "all";
-let searchTerm = "";
-let adminSecret = sessionStorage_safe_get();
-
-function sessionStorage_safe_get(){
-  try { return sessionStorage.getItem('kn_admin_secret') || ''; } catch(e){ return ''; }
-}
-function sessionStorage_safe_set(v){
-  try { sessionStorage.setItem('kn_admin_secret', v); } catch(e){}
-}
-
-function ensureAdminSecret(){
-  if(adminSecret) return adminSecret;
-  const val = prompt("Masukkan Admin Secret (ADMIN_SECRET) untuk melakukan aksi ini:");
-  if(val){
-    adminSecret = val;
-    sessionStorage_safe_set(val);
-  }
-  return adminSecret;
-}
-
-async function addLicense(){
-  const ownerId = prompt("Owner ID (UserId/GroupId Roblox):");
-  if(!ownerId) return;
-  const ownerType = (prompt("Owner Type — ketik 'User' atau 'Group':", "User") || "User").trim();
-  const product = (prompt("Nama product:", "kit-naka") || "kit-naka").trim();
-
-  const secret = ensureAdminSecret();
-  if(!secret) return;
-
-  try{
-    const res = await fetch(API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-admin-secret': secret },
-      body: JSON.stringify({ ownerId: Number(ownerId), ownerType, product, status: 'active' })
-    });
-    const json = await res.json();
-    if(!res.ok){
-      if(res.status === 401){ adminSecret=''; sessionStorage_safe_set(''); }
-      showToast('Gagal: ' + (json.error || res.status));
-      return;
-    }
-    showToast('Lisensi baru ditambahkan');
-    fetchData();
-  }catch(err){
-    showToast('Gagal: ' + err.message);
-  }
-}
-
-async function deleteLicense(row){
-  if(!confirm(`Hapus lisensi untuk owner ${row.owner_id} (${row.product})? Tindakan ini tidak bisa dibatalkan.`)) return;
-
-  const secret = ensureAdminSecret();
-  if(!secret) return;
-
-  try{
-    const res = await fetch(API_URL, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json', 'x-admin-secret': secret },
-      body: JSON.stringify({ ownerId: row.owner_id, ownerType: row.owner_type, product: row.product })
-    });
-    const json = await res.json();
-    if(!res.ok){
-      if(res.status === 401){ adminSecret=''; sessionStorage_safe_set(''); }
-      showToast('Gagal: ' + (json.error || res.status));
-      return;
-    }
-    showToast('Lisensi dihapus');
-    fetchData();
-  }catch(err){
-    showToast('Gagal: ' + err.message);
-  }
-}
-
-function computeStatus(lastSeenAt){
-  if(!lastSeenAt) return "never";
-  const diffMs = Date.now() - new Date(lastSeenAt).getTime();
-  const min = diffMs / 60000;
-  if(min < 2) return "online";
-  if(min < 10) return "idle";
-  return "offline";
-}
-
-function timeAgo(iso){
-  if(!iso) return "—";
-  const diffMs = Date.now() - new Date(iso).getTime();
-  const min = Math.floor(diffMs / 60000);
-  if(min < 1) return "baru saja";
-  if(min < 60) return min + " menit lalu";
-  const hr = Math.floor(min/60);
-  if(hr < 24) return hr + " jam lalu";
-  return Math.floor(hr/24) + " hari lalu";
-}
-
-function showToast(msg){
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  setTimeout(()=> t.classList.remove('show'), 1600);
-}
-
-function copyText(text, label){
-  const value = String(text ?? '');
-  // navigator.clipboard butuh secure context (https) dan bisa gagal diam-diam
-  // di beberapa browser/embed -- fallback manual supaya tombol tetap kerja.
-  const fallback = () => {
-    const ta = document.createElement('textarea');
-    ta.value = value;
-    ta.style.position = 'fixed';
-    ta.style.opacity = '0';
-    document.body.appendChild(ta);
-    ta.select();
-    try { document.execCommand('copy'); } catch(e) {}
-    document.body.removeChild(ta);
-  };
-  if (navigator.clipboard && window.isSecureContext) {
-    navigator.clipboard.writeText(value).then(
-      ()=> showToast(label + " disalin"),
-      ()=> { fallback(); showToast(label + " disalin"); }
-    );
-  } else {
-    fallback();
-    showToast(label + " disalin");
-  }
-}
-
-function openDetail(row){
-  const status = computeStatus(row.last_seen_at);
-  document.getElementById('modalTitle').textContent = row.place_name || row.game_name || "Map tanpa nama";
-  const fields = [
-    ["Place ID", row.place_id],
-    ["Universe ID", row.universe_id],
-    ["Owner ID", row.owner_id],
-    ["Owner Type", row.owner_type],
-    ["Product", row.product],
-    ["Status Lisensi", row.status],
-    ["Kadaluarsa", row.expires_at ? new Date(row.expires_at).toLocaleString('id-ID') : "Tidak ada"],
-    ["Versi Kit", row.system_version || "—"],
-    ["Player Sekarang", (row.player_count ?? "—") + " / " + (row.max_players ?? "—")],
-    ["Tipe Server", row.is_studio ? "Studio" : (row.is_private_server ? "Private Server" : "Live Server")],
-    ["Job ID", row.job_id || "—"],
-    ["Status Live", status.toUpperCase()],
-    ["Pertama Terdeteksi", row.first_seen_at ? new Date(row.first_seen_at).toLocaleString('id-ID') : "—"],
-    ["Terakhir Online", row.last_seen_at ? new Date(row.last_seen_at).toLocaleString('id-ID') : "—"],
-  ];
-  document.getElementById('modalBody').innerHTML = fields.map(([k,v])=>
-    `<div class="row"><span class="k">${k}</span><span class="v">${v ?? "—"}</span></div>`
-  ).join('');
-  document.getElementById('modalBg').classList.add('show');
-}
-
-let visibleRows = []; // rows currently rendered, indexable by data-idx for the delegated click handler
-
-function render(){
-  const tbody = document.getElementById('tableBody');
-  const q = searchTerm.trim().toLowerCase();
-
-  let rows = rawData.filter(r=>{
-    if(q){
-      const hay = `${r.place_name||''} ${r.game_name||''} ${r.owner_id||''} ${r.place_id||''}`.toLowerCase();
-      if(!hay.includes(q)) return false;
-    }
-    const status = computeStatus(r.last_seen_at);
-    if(currentFilter === 'online' && status !== 'online') return false;
-    if(currentFilter === 'issue' && !(r.status !== 'active' || status === 'offline')) return false;
-    return true;
-  });
-
-  let onlineN=0, idleN=0, offN=0;
-  rawData.forEach(r=>{
-    const s = computeStatus(r.last_seen_at);
-    if(s==='online') onlineN++; else if(s==='idle') idleN++; else offN++;
-  });
-  document.getElementById('statOnline').textContent = onlineN;
-  document.getElementById('statIdle').textContent = idleN;
-  document.getElementById('statOffline').textContent = offN;
-  document.getElementById('statTotal').textContent = rawData.length;
-
-  document.getElementById('emptyState').style.display = rows.length ? 'none' : 'block';
-  visibleRows = rows;
-
-  // Escape untuk teks yang ditaruh di dalam HTML (bukan atribut) -- mencegah
-  // nama map dengan karakter <, >, &, dst merusak markup.
-  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({
-    '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
-  }[c]));
-
-  tbody.innerHTML = rows.map((r, idx)=>{
-    const status = computeStatus(r.last_seen_at);
-    const licBadgeClass = r.status === 'active' ? 'active' : (r.status === 'revoked' ? 'revoked' : 'unknown');
-    return `
-      <tr>
-        <td data-label="Map">
-          <div class="map-name">${esc(r.place_name || r.game_name || 'Tanpa nama')}</div>
-          <div class="map-sub">${esc(r.product || '')} · Place ${esc(r.place_id ?? '—')}</div>
-        </td>
-        <td data-label="Owner" class="mono">${esc(r.owner_id)}<br/><span style="color:var(--text-dim)">${esc(r.owner_type)}</span></td>
-        <td data-label="Lisensi"><span class="badge ${licBadgeClass}">${esc((r.status||'unknown').toUpperCase())}</span></td>
-        <td data-label="Player" class="mono">${esc(r.player_count ?? '—')} / ${esc(r.max_players ?? '—')}</td>
-        <td data-label="Status">
-          <span class="status-pill ${status}"><span class="d"></span>${status === 'never' ? 'belum connect' : status}</span>
-        </td>
-        <td data-label="Terakhir Online" class="mono">${esc(r.last_seen_at ? timeAgo(r.last_seen_at) : '—')}</td>
-        <td data-label="Aksi">
-          <div class="actions">
-            <button class="act-btn" data-action="open" data-idx="${idx}">Open</button>
-            <button class="act-btn" data-action="copy-place" data-idx="${idx}">Place ID</button>
-            <button class="act-btn" data-action="copy-universe" data-idx="${idx}">Universe ID</button>
-            <button class="act-btn" data-action="detail" data-idx="${idx}">Detail</button>
-            <button class="act-btn" data-action="delete" data-idx="${idx}" style="color:var(--danger);border-color:rgba(248,113,113,0.3)">Hapus</button>
-          </div>
-        </td>
-      </tr>
-    `;
-  }).join('');
-}
-
-// Event delegation: satu listener di tbody menangani semua tombol aksi,
-// baik yang sudah ada maupun yang baru dirender ulang -- tidak ada lagi
-// data ditempel langsung ke atribut HTML (rawan rusak/silent-fail).
-document.getElementById('tableBody').addEventListener('click', (e)=>{
-  const btn = e.target.closest('button[data-action]');
-  if(!btn) return;
-  const row = visibleRows[Number(btn.dataset.idx)];
-  if(!row) return;
-
-  switch(btn.dataset.action){
-    case 'open': {
-      if(row.place_id){
-        window.open(`https://www.roblox.com/games/${row.place_id}`, '_blank');
-      } else {
-        showToast('Place ID tidak tersedia');
-      }
-      break;
-    }
-    case 'copy-place':
-      copyText(row.place_id, 'Place ID');
-      break;
-    case 'copy-universe':
-      copyText(row.universe_id, 'Universe ID');
-      break;
-    case 'detail':
-      openDetail(row);
-      break;
-    case 'delete':
-      deleteLicense(row);
-      break;
-  }
-});
-
-document.getElementById('addBtn').addEventListener('click', addLicense);
-
-async function fetchData(){
-  document.getElementById('lastRefresh').textContent = "memuat…";
-  try{
-    const res = await fetch(API_URL);
-    const json = await res.json();
-    rawData = json.licenses || [];
-    document.getElementById('lastRefresh').textContent = "Terakhir refresh: " + new Date().toLocaleTimeString('id-ID');
-    render();
-  }catch(err){
-    document.getElementById('lastRefresh').textContent = "Gagal memuat data: " + err.message;
-  }
-}
-
-document.getElementById('search').addEventListener('input', (e)=>{ searchTerm = e.target.value; render(); });
-document.getElementById('refreshBtn').addEventListener('click', fetchData);
-document.querySelectorAll('.filter-btn').forEach(btn=>{
-  btn.addEventListener('click', ()=>{
-    document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
-    btn.classList.add('active');
-    currentFilter = btn.dataset.filter;
-    render();
-  });
-});
-document.getElementById('modalClose').addEventListener('click', ()=> document.getElementById('modalBg').classList.remove('show'));
-document.getElementById('modalBg').addEventListener('click', (e)=>{ if(e.target.id === 'modalBg') e.target.classList.remove('show'); });
-
-fetchData();
-setInterval(fetchData, 30000); // auto-refresh tiap 30 detik
+const API='/api/licenses';
+let secret=sessionStorage.getItem('kn_admin_secret')||'';
+let licenses=[],unauthorized=[],rows=[],visible=[],filter='all',query='';
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function toast(m){$('toast').textContent=m;$('toast').classList.add('show');setTimeout(()=>$('toast').classList.remove('show'),2200)}
+function timeAgo(v){if(!v)return'—';const n=Date.now()-new Date(v).getTime(),m=Math.floor(n/60000);if(m<1)return'baru saja';if(m<60)return m+' menit lalu';const h=Math.floor(m/60);if(h<24)return h+' jam lalu';return Math.floor(h/24)+' hari lalu'}
+function randomKey(){const a=new Uint8Array(24);crypto.getRandomValues(a);return 'NAKA-'+[...a].map(x=>x.toString(16).padStart(2,'0')).join('').toUpperCase()}
+async function api(method='GET',body){const r=await fetch(API,{method,headers:{'Content-Type':'application/json','x-admin-secret':secret},body:body?JSON.stringify(body):undefined});let j={};try{j=await r.json()}catch{}if(!r.ok){if(r.status===401)logout();throw new Error(j.error||('HTTP '+r.status))}return j}
+function login(){const v=$('secretInput').value.trim();if(!v)return;secret=v;sessionStorage.setItem('kn_admin_secret',v);$('loginView').hidden=true;$('app').hidden=false;load()}
+function logout(){secret='';sessionStorage.removeItem('kn_admin_secret');$('app').hidden=true;$('loginView').hidden=false;$('secretInput').value=''}
+async function load(){try{const j=await api();licenses=j.licenses||[];unauthorized=j.unauthorized||[];rows=[...unauthorized,...licenses];$('lastRefresh').textContent='Refresh: '+new Date().toLocaleString('id-ID');render()}catch(e){toast(e.message)}}
+function render(){const q=query.toLowerCase();visible=rows.filter(r=>{if(filter!=='all'&&r.record_type!==filter)return false;const hay=[r.owner_id,r.owner_type,r.product,r.place_name,r.game_name,r.place_id,r.universe_id,r.reason,r.ip_address,r.status].join(' ').toLowerCase();return !q||hay.includes(q)});$('sActive').textContent=new Set(licenses.filter(x=>x.status==='active').map(x=>`${x.owner_id}:${x.product}`)).size;$('sMaps').textContent=licenses.filter(x=>x.ever_connected).length;$('sUnauthorized').textContent=unauthorized.length;$('sTotal').textContent=rows.length;$('empty').hidden=visible.length>0;$('tbody').innerHTML=visible.map((r,i)=>{const una=r.record_type==='unauthorized';const status=una?'unauthorized':(r.status||'unknown');return `<tr><td><span class="badge ${esc(status)}">${una?'TANPA LISENSI':'LISENSI'}</span></td><td><div class="name">${esc(r.place_name||r.game_name||'Tanpa nama')}</div><div class="muted">${esc(r.product||'—')}</div></td><td class="mono">${esc(r.owner_id||'—')}<div class="muted">${esc(r.owner_type||'—')}</div></td><td class="mono">U: ${esc(r.universe_id||r.universe_id_bound||'—')}<div>P: ${esc(r.place_id||'—')}</div></td><td><span class="badge ${esc(status)}">${esc(una?(r.reason||'unauthorized'):status)}</span></td><td class="mono">${esc(r.system_version||'—')}</td><td class="mono">${esc(timeAgo(r.last_seen_at||r.attempted_at))}</td><td class="mono">${esc(una?(r.ip_address||'—'):'—')}</td><td><div class="actions"><button class="btn small" data-a="detail" data-i="${i}">Detail</button>${!una?`<button class="btn small" data-a="reset" data-i="${i}">Reset Universe</button><button class="btn small" data-a="toggle" data-i="${i}">${r.status==='active'?'Revoke':'Aktifkan'}</button><button class="btn small red" data-a="delete" data-i="${i}">Hapus</button>`:''}</div></td></tr>`}).join('')}
+function detail(r){$('modalTitle').textContent=r.record_type==='unauthorized'?'Percobaan Tanpa Lisensi':'Detail Lisensi';const fields=[['Tipe',r.record_type],['Owner',`${r.owner_id||'—'} (${r.owner_type||'—'})`],['Produk',r.product],['Status',r.status],['Alasan',r.reason],['Universe ID',r.universe_id||r.universe_id_bound],['Place ID',r.place_id],['Map',r.place_name||r.game_name],['Versi',r.system_version],['IP',r.ip_address],['User Agent',r.user_agent],['Pertama Aktif',r.activated_at],['Terakhir',r.last_seen_at||r.attempted_at],['Kadaluarsa',r.expires_at]];$('modalBody').innerHTML=fields.map(([k,v])=>`<div class="field"><div class="k">${esc(k)}</div><div class="v">${esc(v||'—')}</div></div>`).join('');$('modalBg').classList.add('show')}
+async function addLicense(){const ownerId=prompt('Owner ID Roblox:');if(!ownerId)return;const ownerType=(prompt('Owner Type: User atau Group','User')||'User').trim();const product=(prompt('Produk:','kit-naka')||'kit-naka').trim();const universeId=(prompt('Universe ID opsional (kosong = bind saat aktivasi pertama):','')||'').trim();const licenseKey=randomKey();try{await api('POST',{ownerId,ownerType,product,universeId:universeId||null,licenseKey,status:'active'});$('modalTitle').textContent='License Key Baru';$('modalBody').innerHTML=`<div class="notice">Simpan dan kirim key ini kepada pembeli. Key tidak dapat dilihat lagi dari dashboard.</div><div class="key-box">${esc(licenseKey)}</div><button class="btn" id="copyKey">Salin Key</button>`;$('modalBg').classList.add('show');setTimeout(()=>{const b=$('copyKey');if(b)b.onclick=()=>navigator.clipboard.writeText(licenseKey).then(()=>toast('Key disalin'))},0);load()}catch(e){toast(e.message)}}
+async function mutate(r,action){try{if(action==='reset'){if(!confirm('Reset binding Universe ID lisensi ini?'))return;await api('PATCH',{ownerId:r.owner_id,ownerType:r.owner_type,product:r.product,resetUniverse:true})}if(action==='toggle'){const status=r.status==='active'?'revoked':'active';if(!confirm(`Ubah status menjadi ${status}?`))return;await api('PATCH',{ownerId:r.owner_id,ownerType:r.owner_type,product:r.product,status})}if(action==='delete'){if(!confirm('Hapus lisensi permanen?'))return;await api('DELETE',{ownerId:r.owner_id,ownerType:r.owner_type,product:r.product})}toast('Perubahan tersimpan');load()}catch(e){toast(e.message)}}
+$('tbody').onclick=e=>{const b=e.target.closest('button[data-a]');if(!b)return;const r=visible[Number(b.dataset.i)];if(!r)return;b.dataset.a==='detail'?detail(r):mutate(r,b.dataset.a)};
+$('loginBtn').onclick=login;$('secretInput').onkeydown=e=>{if(e.key==='Enter')login()};$('refreshBtn').onclick=load;$('addBtn').onclick=addLicense;$('logoutBtn').onclick=logout;$('search').oninput=e=>{query=e.target.value;render()};document.querySelectorAll('.filter').forEach(b=>b.onclick=()=>{document.querySelectorAll('.filter').forEach(x=>x.classList.remove('active'));b.classList.add('active');filter=b.dataset.filter;render()});$('modalClose').onclick=()=> $('modalBg').classList.remove('show');$('modalBg').onclick=e=>{if(e.target===$('modalBg'))$('modalBg').classList.remove('show')};if(secret){$('loginView').hidden=true;$('app').hidden=false;load()}
 </script>
 </body>
 </html>
