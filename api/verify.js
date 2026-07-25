@@ -128,7 +128,7 @@ export default async function handler(req, res) {
     userAgent: cleanString(req.headers['user-agent'], 200)
   };
 
-  if (!ownerId || !placeId || !universeId || !product || !licenseKey || licenseKey.length < 16) {
+  if (!ownerId || !placeId || !universeId || !product) {
     await logAttempt({ url: SUPABASE_URL, key: SUPABASE_KEY }, { ...attemptBase, reason: 'invalid_request' });
     return res.status(400).json({ valid: false, message: 'Data lisensi atau identitas game tidak lengkap' });
   }
@@ -149,10 +149,14 @@ export default async function handler(req, res) {
       return res.status(200).json({ valid: false, message: 'Lisensi tidak terdaftar' });
     }
 
-    const keyHash = await sha256(licenseKey);
-    if (!item.license_key_hash || keyHash !== item.license_key_hash) {
-      await logAttempt({ url: SUPABASE_URL, key: SUPABASE_KEY }, { ...attemptBase, reason: 'invalid_license_key' });
-      return res.status(200).json({ valid: false, message: 'License key tidak cocok' });
+    // Dashboard approval is the primary authorization path. Keep optional
+    // key validation for older clients that still send a license key.
+    if (licenseKey && item.license_key_hash) {
+      const keyHash = await sha256(licenseKey);
+      if (keyHash !== item.license_key_hash) {
+        await logAttempt({ url: SUPABASE_URL, key: SUPABASE_KEY }, { ...attemptBase, reason: 'invalid_license_key' });
+        return res.status(200).json({ valid: false, message: 'License key tidak cocok' });
+      }
     }
 
     const status = cleanString(item.status, 20)?.toLowerCase();
