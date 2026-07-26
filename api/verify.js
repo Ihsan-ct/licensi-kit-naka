@@ -220,7 +220,12 @@ export default async function handler(req, res) {
       serverTime: new Date().toISOString()
     });
   } catch (error) {
-    console.error('[verify] error:', error.message);
-    return res.status(502).json({ valid: false, message: 'Layanan lisensi sedang bermasalah' });
+    const detail = String(error?.message || 'Unknown error').slice(0, 300);
+    console.error('[verify] error:', detail);
+    return res.status(502).json({
+      valid: false,
+      message: 'Layanan lisensi sedang bermasalah',
+      detail
+    });
   }
 }
