@@ -8,7 +8,7 @@ local LicenseClient = {}
 
 local VERIFY_URL = "https://kitnaka-license-api.vercel.app/api/verify"
 local PRODUCT = "kit-naka"
-local SYSTEM_VERSION = "2.0.0"
+local SYSTEM_VERSION = "2.3.1"
 
 -- Akses diberikan lewat status lisensi aktif di dashboard.
 -- Tidak ada key manual di game.

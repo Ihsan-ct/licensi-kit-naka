@@ -34,7 +34,7 @@ type FormState = {
 };
 
 const EMPTY_FORM: FormState = {
-  ownerId: '', ownerType: 'User', product: 'NAKA_SYSTEM', licenseKey: '',
+  ownerId: '', ownerType: 'User', product: 'kit-naka', licenseKey: '',
   status: 'active', universeId: '', expiresAt: ''
 };
 
@@ -148,7 +148,7 @@ export default function Dashboard() {
   }), [uniqueLicenses, data.unauthorized]);
 
   function openCreate() {
-    setSelected(null); setForm({ ...EMPTY_FORM, licenseKey: generateKey() }); setModal('create');
+    setSelected(null); setForm({ ...EMPTY_FORM }); setModal('create');
   }
 
   function openEdit(row: LicenseRow) {
@@ -276,9 +276,9 @@ export default function Dashboard() {
           <div className="form-grid">
             <Field label="Owner ID"><input required pattern="[0-9]+" value={form.ownerId} disabled={modal === 'edit'} onChange={e => setForm({ ...form, ownerId: e.target.value })} placeholder="Contoh: 123456789" /></Field>
             <Field label="Owner Type"><select value={form.ownerType} disabled={modal === 'edit'} onChange={e => setForm({ ...form, ownerType: e.target.value as 'User' | 'Group' })}><option value="User">User</option><option value="Group">Group</option></select></Field>
-            <Field label="Produk"><input required value={form.product} disabled={modal === 'edit'} onChange={e => setForm({ ...form, product: e.target.value })} placeholder="NAKA_SYSTEM" /></Field>
+            <Field label="Produk"><input required value={form.product} disabled={modal === 'edit'} onChange={e => setForm({ ...form, product: e.target.value })} placeholder="kit-naka" /></Field>
             <Field label="Status"><select value={form.status} onChange={e => setForm({ ...form, status: e.target.value as LicenseRow['status'] })}><option value="active">Aktif</option><option value="pending">Menunggu</option><option value="suspended">Ditangguhkan</option><option value="revoked">Dicabut</option></select></Field>
-            <Field label={modal === 'create' ? 'License Key' : 'License Key Baru (opsional)'} wide><div className="input-action"><input required={modal === 'create'} minLength={16} value={form.licenseKey} onChange={e => setForm({ ...form, licenseKey: e.target.value })} placeholder="Minimal 16 karakter" /><button type="button" onClick={() => setForm({ ...form, licenseKey: generateKey() })}>Generate</button></div></Field>
+            {modal !== 'create' && <Field label="License Key Baru (opsional)" wide><div className="input-action"><input minLength={16} value={form.licenseKey} onChange={e => setForm({ ...form, licenseKey: e.target.value })} placeholder="Kosongkan untuk mempertahankan key" /><button type="button" onClick={() => setForm({ ...form, licenseKey: generateKey() })}>Generate</button></div></Field>}
             <Field label="Universe ID (opsional)"><input pattern="[0-9]*" value={form.universeId} onChange={e => setForm({ ...form, universeId: e.target.value })} placeholder="Kosong = bind saat aktivasi" /></Field>
             {modal === 'create' && <Field label="Kedaluwarsa (opsional)"><input type="date" value={form.expiresAt} onChange={e => setForm({ ...form, expiresAt: e.target.value })} /></Field>}
           </div>

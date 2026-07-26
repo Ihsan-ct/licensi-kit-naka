@@ -1,4 +1,4 @@
-import { requireAdmin } from './_lib/admin.js';
+import { audit, requireAdmin } from './_lib/admin.js';
 
 const buckets = globalThis.__nakaAdminRateBuckets || new Map();
 globalThis.__nakaAdminRateBuckets = buckets;
@@ -162,12 +162,14 @@ export default async function handler(req, res) {
           universe_id: universeId, license_key_hash: await hash(licenseKey)
         })
       });
+      await audit(req, 'LICENSE_CREATED', `${ownerType}:${ownerId}:${product}`, null, created?.[0] || null);
       return res.status(200).json({ success: true, license: created?.[0] || null });
     }
 
     const query = `licenses?owner_id=eq.${encodeURIComponent(ownerId)}&owner_type=eq.${encodeURIComponent(ownerType)}&product=eq.${encodeURIComponent(product)}`;
 
     if (req.method === 'PATCH') {
+      const before = await db(base, key, `${query}&select=*`);
       const patch = {};
       if (['active', 'pending', 'suspended', 'revoked'].includes(body.status)) patch.status = body.status;
       if (body.resetUniverse === true) { patch.universe_id = null; patch.activated_at = null; }
@@ -185,11 +187,14 @@ export default async function handler(req, res) {
       const updated = await db(base, key, query, {
         method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(patch)
       });
+      await audit(req, 'LICENSE_UPDATED', `${ownerType}:${ownerId}:${product}`, before?.[0] || null, updated?.[0] || null);
       return res.status(200).json({ success: true, license: updated?.[0] || null });
     }
 
     if (req.method === 'DELETE') {
+      const before = await db(base, key, `${query}&select=*`);
       await db(base, key, query, { method: 'DELETE', headers: { Prefer: 'return=minimal' } });
+      await audit(req, 'LICENSE_DELETED', `${ownerType}:${ownerId}:${product}`, before?.[0] || null, null);
       return res.status(200).json({ success: true });
     }
 

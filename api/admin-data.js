@@ -13,7 +13,7 @@ export default async function handler(req,res){
       const allLic=await safe('licenses?select=*&order=created_at.desc',warnings,'LICENSES');
       const allInst=await safe('installations?select=*&order=last_seen_at.desc',warnings,'INSTALLATIONS');
       const allAttempts=await safe('access_attempts?select=*&order=attempted_at.desc&limit=2000',warnings,'ATTEMPTS');
-      const audits=scope==='audit'?await safe('admin_audit_logs?select=*&order=created_at.desc&limit=500',warnings,'AUDIT'):[];
+      const audits=scope==='audit'?await safe('audit_logs?select=*&order=created_at.desc&limit=500',warnings,'AUDIT'):[];
       const products=await safe('products?select=*&order=name.asc',warnings,'PRODUCTS');
       const licKeys=new Set(allLic.map(x=>`${x.owner_id}:${x.owner_type}:${x.product}`));
       const legacy=allInst.filter(x=>!licKeys.has(`${x.owner_id}:${x.owner_type||'User'}:${x.product}`)).map(x=>({owner_id:x.owner_id,owner_type:x.owner_type||'User',product:x.product,place_id:x.place_id,universe_id:x.universe_id,place_name:x.place_name,game_name:x.game_name,system_version:x.system_version,reason:'LEGACY_NO_LICENSE',attempted_at:x.first_seen_at||x.last_seen_at,last_seen_at:x.last_seen_at,ip_address:null,user_agent:null}));
@@ -33,7 +33,7 @@ export default async function handler(req,res){
     }
     const b=req.body||{}, action=clean(b.action,40);
     if(req.method==='POST'&&action==='create-license'){
-      const ownerId=validId(b.ownerId), ownerType=['User','Group'].includes(b.ownerType)?b.ownerType:null, product=clean(b.product,50), key=clean(b.licenseKey,200);if(!ownerId||!ownerType||!product||!key||key.length<16)return res.status(400).json({error:'Data lisensi tidak valid'});
+      const ownerId=validId(b.ownerId), ownerType=['User','Group'].includes(b.ownerType)?b.ownerType:null, product=clean(b.product,50), key=clean(b.licenseKey,200)||`NAKA-${crypto.randomUUID().replaceAll('-','').toUpperCase()}`;if(!ownerId||!ownerType||!product)return res.status(400).json({error:'Data lisensi tidak valid'});
       const row={owner_id:ownerId,owner_type:ownerType,product,status:'active',universe_id:b.universeId?validId(b.universeId):null,expires_at:b.expiresAt||null,license_key_hash:await sha256(key)};
       const created=await db('licenses?on_conflict=owner_id,owner_type,product',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=representation'},body:JSON.stringify(row)});await audit(req,'LICENSE_CREATED',`${ownerType}:${ownerId}:${product}`,null,created?.[0]||row);return res.json({success:true});
     }

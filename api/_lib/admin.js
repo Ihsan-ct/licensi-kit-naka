@@ -48,7 +48,7 @@ export async function requireAdmin(req) {
 
 export async function db(path, options = {}) {
   const base = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_KEY;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY;
   if (!base || !key) throw new Error('SUPABASE_URL/SUPABASE_KEY belum dikonfigurasi');
   const response = await fetch(`${base}/rest/v1/${path}`, {
     ...options,
@@ -61,9 +61,9 @@ export async function db(path, options = {}) {
 
 export async function audit(req, action, target = null, before = null, after = null, meta = null) {
   try {
-    await db('admin_audit_logs', {
+    await db('audit_logs', {
       method: 'POST', headers: { Prefer: 'return=minimal' },
-      body: JSON.stringify({ action, target, before_data: before, after_data: after, metadata: meta, admin_ip: clientIp(req), user_agent: String(req.headers['user-agent'] || '').slice(0, 300) })
+      body: JSON.stringify({ action, target_type: 'license', target_id: target, before_data: before, after_data: after, metadata: meta, actor_ip: clientIp(req) })
     });
   } catch (error) { console.warn('[audit]', error.message); }
 }

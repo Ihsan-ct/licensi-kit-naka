@@ -1,4 +1,4 @@
--- NAKA License Cloud SSS Dashboard migration
+-- Legacy incremental migration. Untuk instalasi baru gunakan security-migration.sql.
 alter table public.licenses add column if not exists license_key_hash text;
 alter table public.licenses add column if not exists universe_id text;
 alter table public.licenses add column if not exists activated_at timestamptz;

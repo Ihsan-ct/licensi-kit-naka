@@ -2,7 +2,7 @@ const clean=(v,n=160)=>v==null?null:String(v).trim().slice(0,n);
 const ip=req=>clean(String(req.headers['x-forwarded-for']||'').split(',')[0],80)||clean(req.socket?.remoteAddress,80)||'unknown';
 const auth=req=>Boolean(process.env.ADMIN_SECRET&&req.headers['x-admin-secret']===process.env.ADMIN_SECRET);
 const base=()=>process.env.SUPABASE_URL;
-const key=()=>process.env.SUPABASE_KEY;
+const key=()=>process.env.SUPABASE_SERVICE_ROLE_KEY||process.env.SUPABASE_KEY;
 async function db(path,opt={}){const r=await fetch(`${base()}/rest/v1/${path}`,{...opt,headers:{apikey:key(),Authorization:`Bearer ${key()}`,'Content-Type':'application/json',...(opt.headers||{})}});const t=await r.text();if(!r.ok)throw new Error(`Supabase ${r.status}: ${t.slice(0,400)}`);return t?JSON.parse(t):null}
 async function safe(path){try{return await db(path)}catch{return[]}}
 async function audit(req,action,targetType,targetId,beforeData=null,afterData=null,metadata=null){try{await db('audit_logs',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({action,target_type:targetType,target_id:targetId,actor_ip:ip(req),before_data:beforeData,after_data:afterData,metadata})})}catch{}}

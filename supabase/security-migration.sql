@@ -1,6 +1,33 @@
 -- NAKA License Cloud enterprise migration
 -- Jalankan sekali di Supabase SQL Editor menggunakan project owner.
 
+create table if not exists public.licenses (
+  owner_id text not null,
+  owner_type text not null,
+  product text not null,
+  status text not null default 'active',
+  expires_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.installations (
+  owner_id text not null,
+  owner_type text not null default 'User',
+  product text not null,
+  place_id text not null,
+  universe_id text,
+  place_name text,
+  game_name text,
+  job_id text,
+  player_count integer,
+  max_players integer,
+  is_private_server boolean,
+  is_studio boolean,
+  system_version text,
+  first_seen_at timestamptz not null default now(),
+  last_seen_at timestamptz not null default now()
+);
+
 alter table public.licenses
   add column if not exists license_key_hash text,
   add column if not exists universe_id text,
@@ -9,6 +36,20 @@ alter table public.licenses
   add column if not exists notes text,
   add column if not exists compromised_at timestamptz,
   add column if not exists updated_at timestamptz default now();
+
+alter table public.installations
+  add column if not exists owner_type text default 'User',
+  add column if not exists universe_id text,
+  add column if not exists place_name text,
+  add column if not exists game_name text,
+  add column if not exists job_id text,
+  add column if not exists player_count integer,
+  add column if not exists max_players integer,
+  add column if not exists is_private_server boolean,
+  add column if not exists is_studio boolean,
+  add column if not exists system_version text,
+  add column if not exists first_seen_at timestamptz default now(),
+  add column if not exists last_seen_at timestamptz default now();
 
 create unique index if not exists licenses_owner_product_unique
   on public.licenses (owner_id, owner_type, product);
