@@ -3,7 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Activity, AlertTriangle, CheckCircle2, Copy, KeyRound, LayoutDashboard,
-  Loader2, LogOut, Plus, RefreshCw, RotateCcw, Search, ShieldAlert,
+  Loader2, LogOut, Plus, RefreshCw, Search, ShieldAlert,
   ShieldCheck, Trash2, Users, X, Pencil, Server, Ban
 } from 'lucide-react';
 
@@ -30,12 +30,12 @@ type Tab = 'overview' | 'licenses' | 'unauthorized';
 
 type FormState = {
   ownerId: string; ownerType: 'User' | 'Group'; product: string; licenseKey: string;
-  status: LicenseRow['status']; universeId: string; expiresAt: string;
+  status: LicenseRow['status']; expiresAt: string;
 };
 
 const EMPTY_FORM: FormState = {
   ownerId: '', ownerType: 'User', product: 'kit-naka', licenseKey: '',
-  status: 'active', universeId: '', expiresAt: ''
+  status: 'active', expiresAt: ''
 };
 
 const statusLabel: Record<LicenseRow['status'], string> = {
@@ -136,7 +136,7 @@ export default function Dashboard() {
   }, [data.licenses]);
 
   const filtered = useMemo(() => uniqueLicenses.filter(row => {
-    const haystack = `${row.owner_id} ${row.owner_type} ${row.product} ${row.place_name || ''} ${row.universe_id_bound || ''}`.toLowerCase();
+    const haystack = `${row.owner_id} ${row.owner_type} ${row.product} ${row.place_name || ''} ${row.universe_id || ''}`.toLowerCase();
     return (status === 'all' || row.status === status) && haystack.includes(query.toLowerCase());
   }), [uniqueLicenses, query, status]);
 
@@ -155,7 +155,7 @@ export default function Dashboard() {
     setSelected(row);
     setForm({
       ownerId: row.owner_id, ownerType: row.owner_type, product: row.product,
-      licenseKey: '', status: row.status, universeId: row.universe_id_bound || '',
+      licenseKey: '', status: row.status,
       expiresAt: row.expires_at ? row.expires_at.slice(0, 10) : ''
     });
     setModal('edit');
@@ -166,8 +166,7 @@ export default function Dashboard() {
     try {
       const body: Record<string, unknown> = {
         ownerId: form.ownerId.trim(), ownerType: form.ownerType,
-        product: form.product.trim(), status: form.status,
-        universeId: form.universeId.trim() || null
+        product: form.product.trim(), status: form.status
       };
       if (form.licenseKey.trim()) body.licenseKey = form.licenseKey.trim();
       if (modal === 'create') body.expiresAt = form.expiresAt ? new Date(`${form.expiresAt}T23:59:59`).toISOString() : null;
@@ -185,16 +184,6 @@ export default function Dashboard() {
       await api({ method: 'DELETE', body: JSON.stringify({ ownerId: row.owner_id, ownerType: row.owner_type, product: row.product }) });
       setNotice('Lisensi berhasil dihapus.'); await loadData();
     } catch (e) { setError(e instanceof Error ? e.message : 'Gagal menghapus.'); }
-    finally { setSaving(false); setTimeout(() => setNotice(''), 3000); }
-  }
-
-  async function resetUniverse(row: LicenseRow) {
-    if (!confirm(`Reset binding Universe untuk ${row.owner_id}?`)) return;
-    setSaving(true); setError('');
-    try {
-      await api({ method: 'PATCH', body: JSON.stringify({ ownerId: row.owner_id, ownerType: row.owner_type, product: row.product, resetUniverse: true }) });
-      setNotice('Binding Universe berhasil direset.'); await loadData();
-    } catch (e) { setError(e instanceof Error ? e.message : 'Gagal mereset Universe.'); }
     finally { setSaving(false); setTimeout(() => setNotice(''), 3000); }
   }
 
@@ -249,7 +238,7 @@ export default function Dashboard() {
           </div>
           <section className="panel">
             <div className="panel-head"><div><h2>Lisensi Terbaru</h2><p>Status lisensi dan koneksi terakhir.</p></div><button className="text-button" onClick={() => setTab('licenses')}>Lihat semua</button></div>
-            <LicenseTable rows={uniqueLicenses.slice(0, 6)} loading={loading} onEdit={openEdit} onReset={resetUniverse} onDelete={remove} />
+            <LicenseTable rows={uniqueLicenses.slice(0, 6)} loading={loading} onEdit={openEdit} onDelete={remove} />
           </section>
         </>}
 
@@ -258,7 +247,7 @@ export default function Dashboard() {
             <div className="search-box"><Search size={17} /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Cari Owner ID, produk, game, Universe…" /></div>
             <select value={status} onChange={e => setStatus(e.target.value)}><option value="all">Semua status</option><option value="active">Aktif</option><option value="pending">Menunggu</option><option value="suspended">Ditangguhkan</option><option value="revoked">Dicabut</option></select>
           </div>
-          <LicenseTable rows={filtered} loading={loading} onEdit={openEdit} onReset={resetUniverse} onDelete={remove} />
+          <LicenseTable rows={filtered} loading={loading} onEdit={openEdit} onDelete={remove} />
         </section>}
 
         {tab === 'unauthorized' && <section className="panel">
@@ -279,7 +268,6 @@ export default function Dashboard() {
             <Field label="Produk"><input required value={form.product} disabled={modal === 'edit'} onChange={e => setForm({ ...form, product: e.target.value })} placeholder="kit-naka" /></Field>
             <Field label="Status"><select value={form.status} onChange={e => setForm({ ...form, status: e.target.value as LicenseRow['status'] })}><option value="active">Aktif</option><option value="pending">Menunggu</option><option value="suspended">Ditangguhkan</option><option value="revoked">Dicabut</option></select></Field>
             {modal !== 'create' && <Field label="License Key Baru (opsional)" wide><div className="input-action"><input minLength={16} value={form.licenseKey} onChange={e => setForm({ ...form, licenseKey: e.target.value })} placeholder="Kosongkan untuk mempertahankan key" /><button type="button" onClick={() => setForm({ ...form, licenseKey: generateKey() })}>Generate</button></div></Field>}
-            <Field label="Universe ID (opsional)"><input pattern="[0-9]*" value={form.universeId} onChange={e => setForm({ ...form, universeId: e.target.value })} placeholder="Kosong = bind saat aktivasi" /></Field>
             {modal === 'create' && <Field label="Kedaluwarsa (opsional)"><input type="date" value={form.expiresAt} onChange={e => setForm({ ...form, expiresAt: e.target.value })} /></Field>}
           </div>
           <div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setModal(null)}>Batal</button><button className="primary-button" disabled={saving}>{saving ? <><Loader2 className="spin" size={17} /> Menyimpan…</> : modal === 'create' ? 'Buat Lisensi' : 'Simpan Perubahan'}</button></div>
@@ -301,9 +289,9 @@ function EmptyRow({ cols, text }: { cols: number; text: string }) {
   return <tr><td colSpan={cols}><div className="empty"><Activity size={28} /><strong>{text}</strong><span>Data akan muncul otomatis ketika tersedia.</span></div></td></tr>;
 }
 
-function LicenseTable({ rows, loading, onEdit, onReset, onDelete }: { rows: LicenseRow[]; loading: boolean; onEdit: (r: LicenseRow) => void; onReset: (r: LicenseRow) => void; onDelete: (r: LicenseRow) => void }) {
+function LicenseTable({ rows, loading, onEdit, onDelete }: { rows: LicenseRow[]; loading: boolean; onEdit: (r: LicenseRow) => void; onDelete: (r: LicenseRow) => void }) {
   return <div className="table-wrap"><table><thead><tr><th>Owner</th><th>Produk</th><th>Status</th><th>Universe</th><th>Instalasi</th><th>Terakhir Terlihat</th><th>Aksi</th></tr></thead><tbody>
-    {rows.map(row => <tr key={`${row.owner_id}:${row.owner_type}:${row.product}`}><td><strong>{row.owner_id}</strong><small>{row.owner_type}</small></td><td><strong>{row.product}</strong><small>Dibuat {fmt(row.created_at)}</small></td><td><span className={`status ${row.status}`}>{statusLabel[row.status]}</span></td><td><strong>{row.universe_id_bound || 'Belum terikat'}</strong><small>{row.activated_at ? `Aktif ${fmt(row.activated_at)}` : 'Menunggu aktivasi'}</small></td><td><strong>{row.ever_connected ? row.game_name || row.place_name || 'Terhubung' : 'Belum terhubung'}</strong><small>{row.place_id || row.system_version || '—'}</small></td><td>{fmt(row.last_seen_at)}</td><td><div className="row-actions"><button title="Edit" onClick={() => onEdit(row)}><Pencil size={16} /></button><button title="Reset Universe" onClick={() => onReset(row)}><RotateCcw size={16} /></button><button className="danger-action" title="Hapus" onClick={() => onDelete(row)}><Trash2 size={16} /></button></div></td></tr>)}
+    {rows.map(row => <tr key={`${row.owner_id}:${row.owner_type}:${row.product}`}><td><strong>{row.owner_id}</strong><small>{row.owner_type}</small></td><td><strong>{row.product}</strong><small>Dibuat {fmt(row.created_at)}</small></td><td><span className={`status ${row.status}`}>{statusLabel[row.status]}</span></td><td><strong>{row.universe_id || 'Belum terhubung'}</strong><small>Monitoring saja</small></td><td><strong>{row.ever_connected ? row.game_name || row.place_name || 'Terhubung' : 'Belum terhubung'}</strong><small>{row.place_id || row.system_version || '—'}</small></td><td>{fmt(row.last_seen_at)}</td><td><div className="row-actions"><button title="Edit" onClick={() => onEdit(row)}><Pencil size={16} /></button><button className="danger-action" title="Hapus" onClick={() => onDelete(row)}><Trash2 size={16} /></button></div></td></tr>)}
     {!rows.length && !loading && <EmptyRow cols={7} text="Belum ada lisensi." />}
     {loading && <tr><td colSpan={7}><div className="empty"><Loader2 className="spin" size={28} /><strong>Memuat data…</strong></div></td></tr>}
   </tbody></table></div>;

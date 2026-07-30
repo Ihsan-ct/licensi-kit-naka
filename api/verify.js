@@ -170,23 +170,8 @@ export default async function handler(req, res) {
       return res.status(200).json({ valid: false, message: 'Lisensi telah kedaluwarsa' });
     }
 
-    if (item.universe_id && String(item.universe_id) !== universeId) {
-      await logAttempt({ url: SUPABASE_URL, key: SUPABASE_KEY }, { ...attemptBase, reason: 'universe_mismatch' });
-      return res.status(200).json({ valid: false, message: 'Lisensi terikat ke universe lain' });
-    }
-
-    if (!item.universe_id) {
-      await supabaseFetch(
-        SUPABASE_URL,
-        SUPABASE_KEY,
-        `licenses?owner_id=eq.${encodeURIComponent(ownerId)}&owner_type=eq.${encodeURIComponent(ownerType)}&product=eq.${encodeURIComponent(product)}&universe_id=is.null`,
-        {
-          method: 'PATCH',
-          headers: { Prefer: 'return=minimal' },
-          body: JSON.stringify({ universe_id: universeId, activated_at: new Date().toISOString() })
-        }
-      );
-    }
+    // Universe and place are telemetry only. Authorization is intentionally
+    // based on owner identity, owner type, product, status, and expiry.
 
     await supabaseFetch(SUPABASE_URL, SUPABASE_KEY, 'installations?on_conflict=owner_id,product,place_id', {
       method: 'POST',

@@ -2,7 +2,7 @@ import { audit, clean, db, requireAdmin, setCors, sha256, validId } from './_lib
 const num=(v,d,min=1,max=200)=>Math.min(max,Math.max(min,Number.parseInt(v||d,10)||d));
 const esc=v=>encodeURIComponent(String(v));
 async function safe(path,warnings,code){try{return await db(path)}catch(e){warnings.push({code,message:e.message});return[]}}
-function risk(row){let s=10;const n=Number(row.attempt_count||1);s+=Math.min(35,n*3);if(Number(row.universe_count||1)>1)s+=20;if(['REVOKED','SIGNATURE_INVALID','RATE_LIMIT','UNIVERSE_MISMATCH'].includes(row.reason))s+=20;if(row.last_seen_at&&Date.now()-new Date(row.last_seen_at)<3600000)s+=15;return Math.min(100,s)}
+function risk(row){let s=10;const n=Number(row.attempt_count||1);s+=Math.min(35,n*3);if(['REVOKED','SIGNATURE_INVALID','RATE_LIMIT'].includes(row.reason))s+=20;if(row.last_seen_at&&Date.now()-new Date(row.last_seen_at)<3600000)s+=15;return Math.min(100,s)}
 export default async function handler(req,res){
   setCors(req,res); if(req.method==='OPTIONS')return res.status(204).end();
   try{await requireAdmin(req)}catch(e){return res.status(e.status||401).json({error:e.message})}
