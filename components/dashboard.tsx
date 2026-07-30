@@ -1,8 +1,9 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { toCsv } from '../lib/csv';
 import {
-  Activity, AlertTriangle, CheckCircle2, KeyRound, LayoutDashboard,
+  Activity, AlertTriangle, Bell, CheckCircle2, Download, KeyRound, LayoutDashboard,
   Eye, Loader2, LogOut, Plus, RefreshCw, ScrollText, Search, ShieldAlert,
   ShieldCheck, Trash2, X, Pencil, Server
 } from 'lucide-react';
@@ -29,6 +30,9 @@ type AuditRow = {
   id: number; action: string; target_type?: string | null; target_id?: string | null;
   actor_ip?: string | null; actor_label?: string | null; created_at?: string | null;
 };
+
+type Notification = { level: 'warning' | 'danger'; title: string; detail: string };
+type ExportKind = 'licenses' | 'installations' | 'unauthorized' | 'audits';
 
 type ApiData = {
   licenses: LicenseRow[]; unauthorized: AttemptRow[]; audits: AuditRow[];
@@ -85,6 +89,8 @@ export default function Dashboard() {
   const [status, setStatus] = useState('all');
   const [modal, setModal] = useState<'create' | 'edit' | null>(null);
   const [detail, setDetail] = useState<LicenseRow | null>(null);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const [selected, setSelected] = useState<LicenseRow | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
 
@@ -123,13 +129,18 @@ export default function Dashboard() {
   useEffect(() => { loadData(); }, [loadData]);
 
   useEffect(() => {
-    if (!modal && !detail) return;
+    if (!modal && !detail && !notificationsOpen && !exportOpen) return;
     const close = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { setModal(null); setDetail(null); }
+      if (event.key === 'Escape') {
+        setModal(null);
+        setDetail(null);
+        setNotificationsOpen(false);
+        setExportOpen(false);
+      }
     };
     window.addEventListener('keydown', close);
     return () => window.removeEventListener('keydown', close);
-  }, [modal, detail]);
+  }, [modal, detail, notificationsOpen, exportOpen]);
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setError(''); setLoginLoading(true);
@@ -176,6 +187,72 @@ export default function Dashboard() {
     connected: uniqueLicenses.filter(x => x.ever_connected).length,
     unauthorized: data.unauthorized.length
   }), [uniqueLicenses, data.unauthorized]);
+
+  const notifications = useMemo(() => {
+    const items: Notification[] = [];
+    const now = Date.now();
+
+    for (const row of uniqueLicenses) {
+      if (row.status === 'revoked' || row.status === 'suspended') {
+        items.push({ level: 'danger', title: `Lisensi ${statusLabel[row.status]}`, detail: `${row.owner_id} · ${row.product}` });
+      }
+      if (!row.expires_at) continue;
+      const remaining = new Date(row.expires_at).getTime() - now;
+      const days = Math.ceil(remaining / 86_400_000);
+      if (remaining <= 0) items.push({ level: 'danger', title: 'Lisensi kedaluwarsa', detail: `${row.owner_id} · ${row.product}` });
+      else if (days <= 7) items.push({ level: 'warning', title: `Kedaluwarsa ${days} hari lagi`, detail: `${row.owner_id} · ${row.product}` });
+    }
+
+    const deniedToday = data.unauthorized.filter(row => {
+      const time = new Date(row.attempted_at || row.last_seen_at || 0).getTime();
+      return time >= now - 86_400_000;
+    }).length;
+    if (deniedToday) items.unshift({ level: 'danger', title: `${deniedToday} akses ditolak dalam 24 jam`, detail: 'Periksa tab Akses Ditolak.' });
+    return items;
+  }, [uniqueLicenses, data.unauthorized]);
+
+  function exportCsv(kind: ExportKind) {
+    const rows: Record<string, unknown>[] = kind === 'licenses'
+      ? uniqueLicenses.map(row => ({
+        owner_id: row.owner_id, owner_type: row.owner_type, product: row.product,
+        status: row.status, expires_at: row.expires_at, created_at: row.created_at
+      }))
+      : kind === 'installations'
+        ? data.licenses.filter(row => row.ever_connected).map(row => ({
+          owner_id: row.owner_id, owner_type: row.owner_type, product: row.product,
+          game_name: row.game_name, place_id: row.place_id, universe_id: row.universe_id,
+          players: row.player_count, max_players: row.max_players,
+          mode: row.is_studio ? 'Studio' : row.is_private_server ? 'Private' : 'Public',
+          system_version: row.system_version, first_seen_at: row.first_seen_at, last_seen_at: row.last_seen_at
+        }))
+        : kind === 'unauthorized'
+          ? data.unauthorized.map(row => ({
+            attempted_at: row.attempted_at || row.last_seen_at, owner_id: row.owner_id,
+            owner_type: row.owner_type, product: row.product, game_name: row.game_name || row.place_name,
+            place_id: row.place_id, universe_id: row.universe_id, reason: row.reason, ip_address: row.ip_address
+          }))
+          : data.audits.map(row => ({
+            created_at: row.created_at, action: row.action, target_type: row.target_type,
+            target_id: row.target_id, actor_label: row.actor_label, actor_ip: row.actor_ip
+          }));
+
+    const csv = toCsv(rows);
+    if (!csv) {
+      setNotice('Tidak ada data untuk diekspor.');
+    } else {
+      const url = URL.createObjectURL(new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `naka-${kind}-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+      setNotice('File CSV berhasil diunduh.');
+    }
+    setExportOpen(false);
+    setTimeout(() => setNotice(''), 3000);
+  }
 
   function openCreate() {
     setSelected(null); setForm({ ...EMPTY_FORM }); setModal('create');
@@ -252,6 +329,26 @@ export default function Dashboard() {
           <div><p className="eyebrow">CONTROL CENTER</p><h1>{tabTitle[tab]}</h1></div>
           <div className="topbar-actions">
             <button className="icon-button" onClick={loadData} disabled={loading} title="Muat ulang"><RefreshCw className={loading ? 'spin' : ''} size={18} /></button>
+            <div className="action-menu">
+              <button className="icon-button" aria-label="Notifikasi" aria-haspopup="dialog" aria-expanded={notificationsOpen} onClick={() => { setNotificationsOpen(value => !value); setExportOpen(false); }}><Bell size={18} />{!!notifications.length && <span className="notification-count">{Math.min(99, notifications.length)}</span>}</button>
+              {notificationsOpen && <div className="action-popover notification-popover" role="dialog" aria-label="Notifikasi">
+                <div className="popover-head"><strong>Notifikasi</strong><span>{notifications.length}</span></div>
+                <div className="notification-list">
+                  {notifications.map((item, index) => <article className={item.level} key={`${item.title}:${index}`}><AlertTriangle size={16} /><div><strong>{item.title}</strong><small>{item.detail}</small></div></article>)}
+                  {!notifications.length && <div className="popover-empty"><CheckCircle2 size={20} /><span>Semua aman.</span></div>}
+                </div>
+              </div>}
+            </div>
+            <div className="action-menu">
+              <button className="icon-button" aria-label="Export CSV" aria-haspopup="menu" aria-expanded={exportOpen} onClick={() => { setExportOpen(value => !value); setNotificationsOpen(false); }}><Download size={18} /></button>
+              {exportOpen && <div className="action-popover export-popover" role="menu">
+                <div className="popover-head"><strong>Export CSV</strong></div>
+                <button role="menuitem" onClick={() => exportCsv('licenses')}>Lisensi</button>
+                <button role="menuitem" onClick={() => exportCsv('installations')}>Instalasi</button>
+                <button role="menuitem" onClick={() => exportCsv('unauthorized')}>Akses ditolak</button>
+                <button role="menuitem" onClick={() => exportCsv('audits')}>Audit log</button>
+              </div>}
+            </div>
             <button className="primary-button" onClick={openCreate}><Plus size={18} /> Tambah Lisensi</button>
           </div>
         </header>
@@ -284,7 +381,7 @@ export default function Dashboard() {
         {tab === 'unauthorized' && <section className="panel">
           <div className="panel-head"><div><h2>Aktivitas Tanpa Lisensi</h2><p>Upaya penggunaan sistem yang tidak memiliki lisensi valid.</p></div></div>
           <div className="table-wrap"><table><thead><tr><th>Waktu</th><th>Owner</th><th>Produk</th><th>Game / Place</th><th>Universe</th><th>Alasan</th><th>IP</th></tr></thead><tbody>
-            {data.unauthorized.map((row, i) => <tr key={`${row.owner_id}-${row.attempted_at}-${i}`}><td>{fmt(row.attempted_at || row.last_seen_at)}</td><td><strong>{row.owner_id || '—'}</strong><small>{row.owner_type || '—'}</small></td><td>{row.product || '—'}</td><td><strong>{row.game_name || row.place_name || '—'}</strong><small>{row.place_id || '—'}</small></td><td>{row.universe_id || '—'}</td><td><span className="status revoked">{row.reason || 'UNAUTHORIZED'}</span></td><td>{row.ip_address || '—'}</td></tr>)}
+            {data.unauthorized.map((row, i) => <tr key={`${row.owner_id}-${row.attempted_at}-${i}`}><td>{fmt(row.attempted_at || row.last_seen_at)}</td><td><strong>{row.owner_id || '—'}</strong><small>{row.owner_type || '—'}</small></td><td>{row.product || '—'}</td><td><strong>{row.game_name || row.place_name || '—'}</strong><small><RobloxId id={row.place_id} kind="place" /></small></td><td><RobloxId id={row.universe_id} kind="universe" /></td><td><span className="status revoked">{row.reason || 'UNAUTHORIZED'}</span></td><td>{row.ip_address || '—'}</td></tr>)}
             {!data.unauthorized.length && <EmptyRow cols={7} text="Belum ada aktivitas tanpa izin." />}
           </tbody></table></div>
         </section>}
@@ -323,7 +420,7 @@ export default function Dashboard() {
             <article><span>Total universe</span><strong>{new Set(detailInstallations.map(row => row.universe_id).filter(Boolean)).size}</strong></article>
           </div>
           <div className="table-wrap detail-table"><table><thead><tr><th>Game / Place</th><th>Universe</th><th>Players</th><th>Mode</th><th>Versi</th><th>Terakhir Terlihat</th></tr></thead><tbody>
-            {detailInstallations.map((row, index) => <tr key={`${row.place_id}:${row.universe_id}:${index}`}><td><strong>{row.game_name || row.place_name || 'Tanpa nama'}</strong><small>{row.place_id || '—'}</small></td><td>{row.universe_id || '—'}</td><td>{row.player_count ?? '—'} / {row.max_players ?? '—'}</td><td>{row.is_studio ? 'Studio' : row.is_private_server ? 'Private' : 'Public'}</td><td>{row.system_version || '—'}</td><td>{fmt(row.last_seen_at)}</td></tr>)}
+            {detailInstallations.map((row, index) => <tr key={`${row.place_id}:${row.universe_id}:${index}`}><td><strong>{row.game_name || row.place_name || 'Tanpa nama'}</strong><small><RobloxId id={row.place_id} kind="place" /></small></td><td><RobloxId id={row.universe_id} kind="universe" /></td><td>{row.player_count ?? '—'} / {row.max_players ?? '—'}</td><td>{row.is_studio ? 'Studio' : row.is_private_server ? 'Private' : 'Public'}</td><td>{row.system_version || '—'}</td><td>{fmt(row.last_seen_at)}</td></tr>)}
             {!detailInstallations.length && <EmptyRow cols={6} text="Belum ada instalasi untuk lisensi ini." />}
           </tbody></table></div>
         </section>
@@ -337,8 +434,28 @@ export default function Dashboard() {
         .detail-summary strong:not(.status){font-size:20px}
         .detail-table{border:1px solid var(--line);border-radius:12px}
         .detail-table table{min-width:760px}
+        .action-menu{position:relative}
+        .notification-count{position:absolute;top:-5px;right:-5px;min-width:19px;height:19px;display:grid;place-items:center;padding:0 5px;border:2px solid var(--panel);border-radius:999px;background:var(--danger);font-size:9px;font-weight:850}
+        .action-popover{position:absolute;z-index:60;top:51px;right:0;width:min(360px,calc(100vw - 36px));overflow:hidden;border:1px solid var(--line);border-radius:14px;background:#0b1426;box-shadow:0 24px 70px rgba(0,0,0,.55)}
+        .popover-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--line)}
+        .popover-head span{min-width:24px;padding:3px 7px;border-radius:999px;background:rgba(255,255,255,.08);font-size:10px;text-align:center}
+        .notification-list{max-height:360px;overflow:auto}
+        .notification-list article{display:flex;gap:10px;padding:13px 16px;border-bottom:1px solid var(--line)}
+        .notification-list article.warning{color:var(--warning)}
+        .notification-list article.danger{color:var(--danger)}
+        .notification-list article div{min-width:0}
+        .notification-list article strong,.notification-list article small{display:block}
+        .notification-list article strong{font-size:12px}
+        .notification-list article small{margin-top:4px;color:var(--muted);font-size:10px}
+        .popover-empty{display:flex;align-items:center;justify-content:center;gap:8px;padding:28px;color:var(--success);font-size:12px}
+        .export-popover{width:210px;padding:7px}
+        .export-popover .popover-head{margin:-7px -7px 5px}
+        .export-popover>button{width:100%;padding:10px 11px;border-radius:8px;background:transparent;color:#cbd5e5;text-align:left}
+        .export-popover>button:hover{background:rgba(79,140,255,.13);color:#fff}
+        .id-link{color:#8fb5ff;text-decoration:none}
+        .id-link:hover{text-decoration:underline}
         @media(max-width:760px){.sidebar nav{grid-template-columns:repeat(4,1fr)}}
-        @media(max-width:480px){.detail-summary{grid-template-columns:1fr}}
+        @media(max-width:480px){.detail-summary{grid-template-columns:1fr}.topbar{flex-wrap:wrap}.topbar-actions{width:100%;justify-content:flex-end}.action-popover{position:fixed;top:150px;right:18px}}
       `}</style>
     </main>
   );
@@ -356,9 +473,17 @@ function EmptyRow({ cols, text }: { cols: number; text: string }) {
   return <tr><td colSpan={cols}><div className="empty"><Activity size={28} /><strong>{text}</strong><span>Data akan muncul otomatis ketika tersedia.</span></div></td></tr>;
 }
 
+function RobloxId({ id, kind }: { id?: string | null; kind: 'place' | 'universe' }) {
+  if (!id) return <>—</>;
+  const href = kind === 'place'
+    ? `https://www.roblox.com/games/${id}`
+    : `https://create.roblox.com/dashboard/creations/experiences/${id}/overview`;
+  return <a className="id-link" href={href} target="_blank" rel="noreferrer" title={`Buka ${kind === 'place' ? 'Place' : 'Universe'} di Roblox`}>{id}</a>;
+}
+
 function LicenseTable({ rows, loading, onDetail, onEdit, onDelete }: { rows: LicenseRow[]; loading: boolean; onDetail: (r: LicenseRow) => void; onEdit: (r: LicenseRow) => void; onDelete: (r: LicenseRow) => void }) {
   return <div className="table-wrap"><table><thead><tr><th>Owner</th><th>Produk</th><th>Status</th><th>Universe</th><th>Instalasi</th><th>Terakhir Terlihat</th><th>Aksi</th></tr></thead><tbody>
-    {rows.map(row => <tr key={`${row.owner_id}:${row.owner_type}:${row.product}`}><td><strong>{row.owner_id}</strong><small>{row.owner_type}</small></td><td><strong>{row.product}</strong><small>Dibuat {fmt(row.created_at)}</small></td><td><span className={`status ${row.status}`}>{statusLabel[row.status]}</span></td><td><strong>{row.universe_id || 'Belum terhubung'}</strong><small>Monitoring saja</small></td><td><strong>{row.ever_connected ? row.game_name || row.place_name || 'Terhubung' : 'Belum terhubung'}</strong><small>{row.place_id || row.system_version || '—'}</small></td><td>{fmt(row.last_seen_at)}</td><td><div className="row-actions"><button aria-label={`Detail instalasi ${row.owner_id}`} title="Detail instalasi" onClick={() => onDetail(row)}><Eye size={16} /></button><button aria-label={`Edit lisensi ${row.owner_id}`} title="Edit" onClick={() => onEdit(row)}><Pencil size={16} /></button><button className="danger-action" aria-label={`Hapus lisensi ${row.owner_id}`} title="Hapus" onClick={() => onDelete(row)}><Trash2 size={16} /></button></div></td></tr>)}
+    {rows.map(row => <tr key={`${row.owner_id}:${row.owner_type}:${row.product}`}><td><strong>{row.owner_id}</strong><small>{row.owner_type}</small></td><td><strong>{row.product}</strong><small>Dibuat {fmt(row.created_at)}</small></td><td><span className={`status ${row.status}`}>{statusLabel[row.status]}</span></td><td><strong><RobloxId id={row.universe_id} kind="universe" /></strong><small>Monitoring saja</small></td><td><strong>{row.ever_connected ? row.game_name || row.place_name || 'Terhubung' : 'Belum terhubung'}</strong><small>{row.place_id ? <RobloxId id={row.place_id} kind="place" /> : row.system_version || '—'}</small></td><td>{fmt(row.last_seen_at)}</td><td><div className="row-actions"><button aria-label={`Detail instalasi ${row.owner_id}`} title="Detail instalasi" onClick={() => onDetail(row)}><Eye size={16} /></button><button aria-label={`Edit lisensi ${row.owner_id}`} title="Edit" onClick={() => onEdit(row)}><Pencil size={16} /></button><button className="danger-action" aria-label={`Hapus lisensi ${row.owner_id}`} title="Hapus" onClick={() => onDelete(row)}><Trash2 size={16} /></button></div></td></tr>)}
     {!rows.length && !loading && <EmptyRow cols={7} text="Belum ada lisensi." />}
     {loading && <tr><td colSpan={7}><div className="empty"><Loader2 className="spin" size={28} /><strong>Memuat data…</strong></div></td></tr>}
   </tbody></table></div>;
