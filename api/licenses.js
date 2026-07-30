@@ -75,9 +75,12 @@ export default async function handler(req, res) {
   try {
     if (req.method === 'GET') {
       const warnings = [];
-      const licenses = await safeRead(base, key, 'licenses?select=*&order=created_at.desc', 'LICENSES_READ_FAILED', warnings);
-      const installations = await safeRead(base, key, 'installations?select=*&order=last_seen_at.desc', 'INSTALLATIONS_READ_FAILED', warnings);
-      const attempts = await safeRead(base, key, 'access_attempts?select=*&order=attempted_at.desc&limit=500', 'ACCESS_ATTEMPTS_TABLE_MISSING', warnings);
+      const [licenses, installations, attempts, audits] = await Promise.all([
+        safeRead(base, key, 'licenses?select=*&order=created_at.desc', 'LICENSES_READ_FAILED', warnings),
+        safeRead(base, key, 'installations?select=*&order=last_seen_at.desc', 'INSTALLATIONS_READ_FAILED', warnings),
+        safeRead(base, key, 'access_attempts?select=*&order=attempted_at.desc&limit=500', 'ACCESS_ATTEMPTS_TABLE_MISSING', warnings),
+        safeRead(base, key, 'audit_logs?select=id,action,target_type,target_id,actor_ip,actor_label,created_at&order=created_at.desc&limit=300', 'AUDIT_LOGS_READ_FAILED', warnings)
+      ]);
 
       const installGroups = {};
       const licenseKeys = new Set();
@@ -137,7 +140,7 @@ export default async function handler(req, res) {
       unauthorized.sort((a, b) => new Date(b.attempted_at || 0) - new Date(a.attempted_at || 0));
       const fatal = warnings.find((w) => w.code === 'LICENSES_READ_FAILED');
       if (fatal) return res.status(502).json({ error: 'Tabel licenses gagal dibaca', detail: fatal.message, warnings });
-      return res.status(200).json({ licenses: merged, unauthorized, warnings });
+      return res.status(200).json({ licenses: merged, unauthorized, audits, warnings });
     }
 
     const body = req.body || {};

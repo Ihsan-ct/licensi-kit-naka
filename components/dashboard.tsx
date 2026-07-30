@@ -2,9 +2,9 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Activity, AlertTriangle, CheckCircle2, Copy, KeyRound, LayoutDashboard,
-  Loader2, LogOut, Plus, RefreshCw, Search, ShieldAlert,
-  ShieldCheck, Trash2, Users, X, Pencil, Server, Ban
+  Activity, AlertTriangle, CheckCircle2, KeyRound, LayoutDashboard,
+  Eye, Loader2, LogOut, Plus, RefreshCw, ScrollText, Search, ShieldAlert,
+  ShieldCheck, Trash2, X, Pencil, Server
 } from 'lucide-react';
 
 type LicenseRow = {
@@ -25,8 +25,16 @@ type AttemptRow = {
   last_seen_at?: string | null; source?: string | null;
 };
 
-type ApiData = { licenses: LicenseRow[]; unauthorized: AttemptRow[]; warnings?: { code: string; message: string }[] };
-type Tab = 'overview' | 'licenses' | 'unauthorized';
+type AuditRow = {
+  id: number; action: string; target_type?: string | null; target_id?: string | null;
+  actor_ip?: string | null; actor_label?: string | null; created_at?: string | null;
+};
+
+type ApiData = {
+  licenses: LicenseRow[]; unauthorized: AttemptRow[]; audits: AuditRow[];
+  warnings?: { code: string; message: string }[];
+};
+type Tab = 'overview' | 'licenses' | 'unauthorized' | 'audit';
 
 type FormState = {
   ownerId: string; ownerType: 'User' | 'Group'; product: string; licenseKey: string;
@@ -40,6 +48,13 @@ const EMPTY_FORM: FormState = {
 
 const statusLabel: Record<LicenseRow['status'], string> = {
   active: 'Aktif', pending: 'Menunggu', suspended: 'Ditangguhkan', revoked: 'Dicabut'
+};
+
+const tabTitle: Record<Tab, string> = {
+  overview: 'Ringkasan Sistem',
+  licenses: 'Manajemen Lisensi',
+  unauthorized: 'Log Akses Ditolak',
+  audit: 'Audit Log'
 };
 
 function fmt(value?: string | null) {
@@ -64,11 +79,12 @@ export default function Dashboard() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [data, setData] = useState<ApiData>({ licenses: [], unauthorized: [], warnings: [] });
+  const [data, setData] = useState<ApiData>({ licenses: [], unauthorized: [], audits: [], warnings: [] });
   const [tab, setTab] = useState<Tab>('overview');
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('all');
   const [modal, setModal] = useState<'create' | 'edit' | null>(null);
+  const [detail, setDetail] = useState<LicenseRow | null>(null);
   const [selected, setSelected] = useState<LicenseRow | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
 
@@ -106,6 +122,15 @@ export default function Dashboard() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  useEffect(() => {
+    if (!modal && !detail) return;
+    const close = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { setModal(null); setDetail(null); }
+    };
+    window.addEventListener('keydown', close);
+    return () => window.removeEventListener('keydown', close);
+  }, [modal, detail]);
+
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setError(''); setLoginLoading(true);
     try {
@@ -122,7 +147,7 @@ export default function Dashboard() {
   }
 
   function logout() {
-    window.sessionStorage.removeItem('naka_token'); setToken(''); setData({ licenses: [], unauthorized: [] });
+    window.sessionStorage.removeItem('naka_token'); setToken(''); setData({ licenses: [], unauthorized: [], audits: [] });
   }
 
   const uniqueLicenses = useMemo(() => {
@@ -139,6 +164,11 @@ export default function Dashboard() {
     const haystack = `${row.owner_id} ${row.owner_type} ${row.product} ${row.place_name || ''} ${row.universe_id || ''}`.toLowerCase();
     return (status === 'all' || row.status === status) && haystack.includes(query.toLowerCase());
   }), [uniqueLicenses, query, status]);
+
+  const detailInstallations = useMemo(() => detail ? data.licenses.filter(row =>
+    row.ever_connected && row.owner_id === detail.owner_id
+    && row.owner_type === detail.owner_type && row.product === detail.product
+  ) : [], [data.licenses, detail]);
 
   const stats = useMemo(() => ({
     total: uniqueLicenses.length,
@@ -212,13 +242,14 @@ export default function Dashboard() {
           <button className={tab === 'overview' ? 'active' : ''} onClick={() => setTab('overview')}><LayoutDashboard size={18} /> Ringkasan</button>
           <button className={tab === 'licenses' ? 'active' : ''} onClick={() => setTab('licenses')}><KeyRound size={18} /> Lisensi <em>{stats.total}</em></button>
           <button className={tab === 'unauthorized' ? 'active' : ''} onClick={() => setTab('unauthorized')}><ShieldAlert size={18} /> Akses Ditolak <em>{stats.unauthorized}</em></button>
+          <button className={tab === 'audit' ? 'active' : ''} onClick={() => setTab('audit')}><ScrollText size={18} /> Audit Log <em>{data.audits.length}</em></button>
         </nav>
         <div className="sidebar-footer"><button onClick={logout}><LogOut size={18} /> Keluar</button></div>
       </aside>
 
       <section className="workspace">
         <header className="topbar">
-          <div><p className="eyebrow">CONTROL CENTER</p><h1>{tab === 'overview' ? 'Ringkasan Sistem' : tab === 'licenses' ? 'Manajemen Lisensi' : 'Log Akses Ditolak'}</h1></div>
+          <div><p className="eyebrow">CONTROL CENTER</p><h1>{tabTitle[tab]}</h1></div>
           <div className="topbar-actions">
             <button className="icon-button" onClick={loadData} disabled={loading} title="Muat ulang"><RefreshCw className={loading ? 'spin' : ''} size={18} /></button>
             <button className="primary-button" onClick={openCreate}><Plus size={18} /> Tambah Lisensi</button>
@@ -238,7 +269,7 @@ export default function Dashboard() {
           </div>
           <section className="panel">
             <div className="panel-head"><div><h2>Lisensi Terbaru</h2><p>Status lisensi dan koneksi terakhir.</p></div><button className="text-button" onClick={() => setTab('licenses')}>Lihat semua</button></div>
-            <LicenseTable rows={uniqueLicenses.slice(0, 6)} loading={loading} onEdit={openEdit} onDelete={remove} />
+            <LicenseTable rows={uniqueLicenses.slice(0, 6)} loading={loading} onDetail={setDetail} onEdit={openEdit} onDelete={remove} />
           </section>
         </>}
 
@@ -247,7 +278,7 @@ export default function Dashboard() {
             <div className="search-box"><Search size={17} /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Cari Owner ID, produk, game, Universe…" /></div>
             <select value={status} onChange={e => setStatus(e.target.value)}><option value="all">Semua status</option><option value="active">Aktif</option><option value="pending">Menunggu</option><option value="suspended">Ditangguhkan</option><option value="revoked">Dicabut</option></select>
           </div>
-          <LicenseTable rows={filtered} loading={loading} onEdit={openEdit} onDelete={remove} />
+          <LicenseTable rows={filtered} loading={loading} onDetail={setDetail} onEdit={openEdit} onDelete={remove} />
         </section>}
 
         {tab === 'unauthorized' && <section className="panel">
@@ -257,11 +288,20 @@ export default function Dashboard() {
             {!data.unauthorized.length && <EmptyRow cols={7} text="Belum ada aktivitas tanpa izin." />}
           </tbody></table></div>
         </section>}
+
+        {tab === 'audit' && <section className="panel">
+          <div className="panel-head"><div><h2>Riwayat Aktivitas Admin</h2><p>Login dan perubahan lisensi terbaru, maksimal 300 aktivitas.</p></div></div>
+          <div className="table-wrap"><table><thead><tr><th>Waktu</th><th>Aktivitas</th><th>Target</th><th>Admin</th><th>IP</th></tr></thead><tbody>
+            {data.audits.map(row => <tr key={row.id}><td>{fmt(row.created_at)}</td><td><span className="status pending">{row.action}</span></td><td><strong>{row.target_id || '—'}</strong><small>{row.target_type || 'sistem'}</small></td><td>{row.actor_label || 'admin'}</td><td>{row.actor_ip || '—'}</td></tr>)}
+            {!data.audits.length && !loading && <EmptyRow cols={5} text="Belum ada aktivitas admin." />}
+            {loading && <tr><td colSpan={5}><div className="empty"><Loader2 className="spin" size={28} /><strong>Memuat audit log…</strong></div></td></tr>}
+          </tbody></table></div>
+        </section>}
       </section>
 
       {modal && <div className="modal-backdrop" onMouseDown={e => e.target === e.currentTarget && setModal(null)}>
         <form className="modal" onSubmit={submitForm}>
-          <div className="modal-head"><div><p className="eyebrow">{modal === 'create' ? 'LISENSI BARU' : 'PERBARUI LISENSI'}</p><h2>{modal === 'create' ? 'Tambah Lisensi' : `${selected?.owner_id} · ${selected?.product}`}</h2></div><button type="button" className="icon-button" onClick={() => setModal(null)}><X size={19} /></button></div>
+          <div className="modal-head"><div><p className="eyebrow">{modal === 'create' ? 'LISENSI BARU' : 'PERBARUI LISENSI'}</p><h2>{modal === 'create' ? 'Tambah Lisensi' : `${selected?.owner_id} · ${selected?.product}`}</h2></div><button type="button" className="icon-button" aria-label="Tutup formulir" onClick={() => setModal(null)}><X size={19} /></button></div>
           <div className="form-grid">
             <Field label="Owner ID"><input required pattern="[0-9]+" value={form.ownerId} disabled={modal === 'edit'} onChange={e => setForm({ ...form, ownerId: e.target.value })} placeholder="Contoh: 123456789" /></Field>
             <Field label="Owner Type"><select value={form.ownerType} disabled={modal === 'edit'} onChange={e => setForm({ ...form, ownerType: e.target.value as 'User' | 'Group' })}><option value="User">User</option><option value="Group">Group</option></select></Field>
@@ -273,6 +313,33 @@ export default function Dashboard() {
           <div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setModal(null)}>Batal</button><button className="primary-button" disabled={saving}>{saving ? <><Loader2 className="spin" size={17} /> Menyimpan…</> : modal === 'create' ? 'Buat Lisensi' : 'Simpan Perubahan'}</button></div>
         </form>
       </div>}
+
+      {detail && <div className="modal-backdrop" onMouseDown={e => e.target === e.currentTarget && setDetail(null)}>
+        <section className="modal detail-modal" role="dialog" aria-modal="true" aria-labelledby="license-detail-title">
+          <div className="modal-head"><div><p className="eyebrow">DETAIL LISENSI</p><h2 id="license-detail-title">{detail.owner_id} · {detail.product}</h2></div><button type="button" className="icon-button" aria-label="Tutup detail" onClick={() => setDetail(null)}><X size={19} /></button></div>
+          <div className="detail-summary">
+            <article><span>Status</span><strong className={`status ${detail.status}`}>{statusLabel[detail.status]}</strong></article>
+            <article><span>Total instalasi</span><strong>{detailInstallations.length}</strong></article>
+            <article><span>Total universe</span><strong>{new Set(detailInstallations.map(row => row.universe_id).filter(Boolean)).size}</strong></article>
+          </div>
+          <div className="table-wrap detail-table"><table><thead><tr><th>Game / Place</th><th>Universe</th><th>Players</th><th>Mode</th><th>Versi</th><th>Terakhir Terlihat</th></tr></thead><tbody>
+            {detailInstallations.map((row, index) => <tr key={`${row.place_id}:${row.universe_id}:${index}`}><td><strong>{row.game_name || row.place_name || 'Tanpa nama'}</strong><small>{row.place_id || '—'}</small></td><td>{row.universe_id || '—'}</td><td>{row.player_count ?? '—'} / {row.max_players ?? '—'}</td><td>{row.is_studio ? 'Studio' : row.is_private_server ? 'Private' : 'Public'}</td><td>{row.system_version || '—'}</td><td>{fmt(row.last_seen_at)}</td></tr>)}
+            {!detailInstallations.length && <EmptyRow cols={6} text="Belum ada instalasi untuk lisensi ini." />}
+          </tbody></table></div>
+        </section>
+      </div>}
+      <style jsx global>{`
+        .detail-modal{width:min(1040px,100%)}
+        .detail-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:18px}
+        .detail-summary article{padding:14px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.035)}
+        .detail-summary span,.detail-summary strong{display:block}
+        .detail-summary span{margin-bottom:7px;color:var(--muted);font-size:11px}
+        .detail-summary strong:not(.status){font-size:20px}
+        .detail-table{border:1px solid var(--line);border-radius:12px}
+        .detail-table table{min-width:760px}
+        @media(max-width:760px){.sidebar nav{grid-template-columns:repeat(4,1fr)}}
+        @media(max-width:480px){.detail-summary{grid-template-columns:1fr}}
+      `}</style>
     </main>
   );
 }
@@ -289,9 +356,9 @@ function EmptyRow({ cols, text }: { cols: number; text: string }) {
   return <tr><td colSpan={cols}><div className="empty"><Activity size={28} /><strong>{text}</strong><span>Data akan muncul otomatis ketika tersedia.</span></div></td></tr>;
 }
 
-function LicenseTable({ rows, loading, onEdit, onDelete }: { rows: LicenseRow[]; loading: boolean; onEdit: (r: LicenseRow) => void; onDelete: (r: LicenseRow) => void }) {
+function LicenseTable({ rows, loading, onDetail, onEdit, onDelete }: { rows: LicenseRow[]; loading: boolean; onDetail: (r: LicenseRow) => void; onEdit: (r: LicenseRow) => void; onDelete: (r: LicenseRow) => void }) {
   return <div className="table-wrap"><table><thead><tr><th>Owner</th><th>Produk</th><th>Status</th><th>Universe</th><th>Instalasi</th><th>Terakhir Terlihat</th><th>Aksi</th></tr></thead><tbody>
-    {rows.map(row => <tr key={`${row.owner_id}:${row.owner_type}:${row.product}`}><td><strong>{row.owner_id}</strong><small>{row.owner_type}</small></td><td><strong>{row.product}</strong><small>Dibuat {fmt(row.created_at)}</small></td><td><span className={`status ${row.status}`}>{statusLabel[row.status]}</span></td><td><strong>{row.universe_id || 'Belum terhubung'}</strong><small>Monitoring saja</small></td><td><strong>{row.ever_connected ? row.game_name || row.place_name || 'Terhubung' : 'Belum terhubung'}</strong><small>{row.place_id || row.system_version || '—'}</small></td><td>{fmt(row.last_seen_at)}</td><td><div className="row-actions"><button title="Edit" onClick={() => onEdit(row)}><Pencil size={16} /></button><button className="danger-action" title="Hapus" onClick={() => onDelete(row)}><Trash2 size={16} /></button></div></td></tr>)}
+    {rows.map(row => <tr key={`${row.owner_id}:${row.owner_type}:${row.product}`}><td><strong>{row.owner_id}</strong><small>{row.owner_type}</small></td><td><strong>{row.product}</strong><small>Dibuat {fmt(row.created_at)}</small></td><td><span className={`status ${row.status}`}>{statusLabel[row.status]}</span></td><td><strong>{row.universe_id || 'Belum terhubung'}</strong><small>Monitoring saja</small></td><td><strong>{row.ever_connected ? row.game_name || row.place_name || 'Terhubung' : 'Belum terhubung'}</strong><small>{row.place_id || row.system_version || '—'}</small></td><td>{fmt(row.last_seen_at)}</td><td><div className="row-actions"><button aria-label={`Detail instalasi ${row.owner_id}`} title="Detail instalasi" onClick={() => onDetail(row)}><Eye size={16} /></button><button aria-label={`Edit lisensi ${row.owner_id}`} title="Edit" onClick={() => onEdit(row)}><Pencil size={16} /></button><button className="danger-action" aria-label={`Hapus lisensi ${row.owner_id}`} title="Hapus" onClick={() => onDelete(row)}><Trash2 size={16} /></button></div></td></tr>)}
     {!rows.length && !loading && <EmptyRow cols={7} text="Belum ada lisensi." />}
     {loading && <tr><td colSpan={7}><div className="empty"><Loader2 className="spin" size={28} /><strong>Memuat data…</strong></div></td></tr>}
   </tbody></table></div>;
