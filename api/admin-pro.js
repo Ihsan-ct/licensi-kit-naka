@@ -19,7 +19,52 @@ export default async function handler(req,res){cors(req,res);if(req.method==='OP
   if(resource==='export'){const type=u.searchParams.get('type')||'licenses';const allowed={licenses:'licenses?select=*&order=created_at.desc',installations:'installations?select=*&order=last_seen_at.desc',attempts:'access_attempts?select=*&order=attempted_at.desc',audits:'audit_logs?select=*&order=created_at.desc'};if(!allowed[type])return res.status(400).json({error:'Jenis export tidak valid'});return res.status(200).json({type,data:await safe(allowed[type]),exported_at:new Date().toISOString()})}
  }
  const b=req.body||{};
- if(req.method==='POST'&&resource==='product'){const row={code:clean(b.code,50),name:clean(b.name,100),latest_version:clean(b.latestVersion,30),minimum_version:clean(b.minimumVersion,30),version_policy:['allow','warn','block'].includes(b.versionPolicy)?b.versionPolicy:'warn',maintenance:Boolean(b.maintenance)};if(!row.code||!row.name)return res.status(400).json({error:'Code dan nama produk wajib'});const out=await db('products?on_conflict=code',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=representation'},body:JSON.stringify(row)});await audit(req,'PRODUCT_UPSERT','product',row.code,null,row);return res.status(200).json({success:true,product:out?.[0]})}
+ if(req.method==='POST'&&resource==='product'){
+  const productKey=clean(b.productKey ?? b.code,50);
+  const name=clean(b.name,100);
+  const description=clean(b.description,500);
+  const status=['active','inactive'].includes(b.status)
+    ? b.status
+    : 'active';
+
+  if(!productKey||!name){
+    return res.status(400).json({
+      error:'Product key dan nama produk wajib'
+    });
+  }
+
+  const row={
+    product_key:productKey,
+    name,
+    description,
+    status
+  };
+
+  const out=await db(
+    'products?on_conflict=product_key',
+    {
+      method:'POST',
+      headers:{
+        Prefer:'resolution=merge-duplicates,return=representation'
+      },
+      body:JSON.stringify(row)
+    }
+  );
+
+  await audit(
+    req,
+    'PRODUCT_UPSERT',
+    'product',
+    productKey,
+    null,
+    row
+  );
+
+  return res.status(200).json({
+    success:true,
+    product:out?.[0]||null
+  });
+}
  if(req.method==='POST'&&resource==='note'){const row={owner_id:clean(b.ownerId,30),owner_type:b.ownerType==='Group'?'Group':'User',note:clean(b.note,1000)};if(!row.owner_id||!row.note)return res.status(400).json({error:'Owner dan catatan wajib'});const out=await db('customer_notes',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify(row)});await audit(req,'CUSTOMER_NOTE_CREATED','customer',`${row.owner_type}:${row.owner_id}`,null,row);return res.status(200).json({success:true,note:out?.[0]})}
  if(req.method==='POST'&&resource==='audit'){await audit(req,clean(b.action,80)||'ADMIN_ACTION',clean(b.targetType,40),clean(b.targetId,120),b.before||null,b.after||null,b.metadata||null);return res.status(200).json({success:true})}
  if(req.method==='PATCH'&&resource==='license'){const owner=clean(b.ownerId,30),type=b.ownerType==='Group'?'Group':'User',product=clean(b.product,50);if(!owner||!product)return res.status(400).json({error:'Identitas lisensi tidak lengkap'});const q=`licenses?owner_id=eq.${encodeURIComponent(owner)}&owner_type=eq.${type}&product=eq.${encodeURIComponent(product)}`;const before=(await safe(`${q}&select=*`))[0]||null;const patch={updated_at:new Date().toISOString()};if(['active','pending','suspended','revoked','compromised'].includes(b.status))patch.status=b.status;if(b.status==='compromised')patch.compromised_at=new Date().toISOString();if(b.customerName!==undefined)patch.customer_name=clean(b.customerName,120);if(b.notes!==undefined)patch.notes=clean(b.notes,1000);const out=await db(q,{method:'PATCH',headers:{Prefer:'return=representation'},body:JSON.stringify(patch)});await audit(req,'LICENSE_UPDATED','license',`${type}:${owner}:${product}`,before,out?.[0]||patch);return res.status(200).json({success:true,license:out?.[0]})}
