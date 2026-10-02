@@ -88,12 +88,10 @@ create table if not exists public.audit_logs (
 create index if not exists audit_logs_created_at_idx on public.audit_logs (created_at desc);
 
 create table if not exists public.products (
-  code text primary key,
+  product_key text not null unique,
   name text not null,
-  latest_version text,
-  minimum_version text,
-  version_policy text not null default 'warn' check (version_policy in ('allow','warn','block')),
-  maintenance boolean not null default false,
+  description text,
+  status text not null default 'active' check (status in ('active','inactive')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
