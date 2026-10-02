@@ -42,8 +42,48 @@ export default async function handler(req,res){
       const query=`licenses?owner_id=eq.${esc(ownerId)}&owner_type=eq.${esc(ownerType)}&product=eq.${esc(product)}`;const before=await db(`${query}&select=*`);const patch={};if(['active','pending','suspended','revoked','compromised'].includes(b.status))patch.status=b.status;if(b.resetUniverse){patch.universe_id=null;patch.activated_at=null}if(b.licenseKey)patch.license_key_hash=await sha256(clean(b.licenseKey,200));if(!Object.keys(patch).length)return res.status(400).json({error:'Tidak ada perubahan'});const after=await db(query,{method:'PATCH',headers:{Prefer:'return=representation'},body:JSON.stringify(patch)});await audit(req,'LICENSE_UPDATED',`${ownerType}:${ownerId}:${product}`,before?.[0],after?.[0],{operation:b.operation||null});return res.json({success:true});
     }
     if(req.method==='POST'&&action==='upsert-product'){
-      const code=clean(b.code,40),name=clean(b.name,80),latest=clean(b.latestVersion,30),minimum=clean(b.minimumVersion,30),policy=['allow','warn','block'].includes(b.policy)?b.policy:'warn';if(!code||!name)return res.status(400).json({error:'Kode dan nama produk wajib'});const row={code,name,latest_version:latest,minimum_version:minimum,version_policy:policy,maintenance:Boolean(b.maintenance)};const out=await db('products?on_conflict=code',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=representation'},body:JSON.stringify(row)});await audit(req,'PRODUCT_UPSERT',code,null,out?.[0]||row);return res.json({success:true});
+  const productKey=clean(b.productKey ?? b.code,50);
+  const name=clean(b.name,100);
+  const description=clean(b.description,500);
+  const status=['active','inactive'].includes(b.status)?b.status:'active';
+
+  if(!productKey||!name){
+    return res.status(400).json({
+      error:'Product key dan nama produk wajib'
+    });
+  }
+
+  const row={
+    product_key:productKey,
+    name,
+    description,
+    status
+  };
+
+  const out=await db(
+    `products?on_conflict=product_key`,
+    {
+      method:'POST',
+      headers:{
+        Prefer:'resolution=merge-duplicates,return=representation'
+      },
+      body:JSON.stringify(row)
     }
+  );
+
+  await audit(
+    req,
+    'PRODUCT_UPSERT',
+    productKey,
+    null,
+    out?.[0]||row
+  );
+
+  return res.status(200).json({
+    success:true,
+    product:out?.[0]||row
+  });
+}
     return res.status(405).json({error:'Method/action tidak didukung'});
   }catch(e){console.error('[admin-data]',e);return res.status(502).json({error:'Operasi dashboard gagal',detail:e.message})}
 }
