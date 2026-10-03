@@ -3,10 +3,13 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { toCsv } from '../lib/csv';
 import {
-  Activity, AlertTriangle, Bell, CheckCircle2, Download, KeyRound, LayoutDashboard,
-  Eye, Loader2, LogOut, Plus, RefreshCw, ScrollText, Search, ShieldAlert,
-  ShieldCheck, Trash2, X, Pencil, Server
+  Activity, AlertTriangle, BarChart3, Bell, CheckCircle2, Command, Download, Eye,
+  Gauge, Globe2, KeyRound, LayoutDashboard, Loader2, LogOut, Map, Menu, Network,
+  Pencil, Plus, RefreshCw, Search, Server, Settings, ShieldAlert, ShieldCheck,
+  SlidersHorizontal, Sparkles, Terminal, Trash2, X, Zap, Clock3, Users, Database,
+  Workflow, LockKeyhole, LifeBuoy, Radio, FileSearch, Package, Webhook
 } from 'lucide-react';
+import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 type LicenseRow = {
   record_type: 'license'; owner_id: string; owner_type: 'User' | 'Group'; product: string;
@@ -17,476 +20,85 @@ type LicenseRow = {
   max_players?: number | null; is_private_server?: boolean; is_studio?: boolean;
   system_version?: string | null; first_seen_at?: string | null; last_seen_at?: string | null;
 };
+type AttemptRow = { record_type:'unauthorized'; owner_id?:string|null; owner_type?:string|null; product?:string|null; place_id?:string|null; universe_id?:string|null; place_name?:string|null; game_name?:string|null; system_version?:string|null; reason?:string|null; ip_address?:string|null; attempted_at?:string|null; last_seen_at?:string|null; source?:string|null };
+type AuditRow = { id:number; action:string; target_type?:string|null; target_id?:string|null; actor_ip?:string|null; actor_label?:string|null; created_at?:string|null };
+type ApiData = { licenses:LicenseRow[]; unauthorized:AttemptRow[]; audits:AuditRow[]; warnings?:{code:string;message:string}[] };
+type Tab = 'overview'|'licenses'|'maps'|'servers'|'security'|'analytics'|'operations'|'audit'|'settings';
+type FormState = { ownerId:string; ownerType:'User'|'Group'; product:string; licenseKey:string; status:LicenseRow['status']; expiresAt:string; universeId:string; placeId:string };
+const EMPTY_FORM:FormState={ownerId:'',ownerType:'User',product:'kit-naka',licenseKey:'',status:'active',expiresAt:'',universeId:'',placeId:''};
+const statusLabel={active:'Aktif',pending:'Menunggu',suspended:'Ditangguhkan',revoked:'Dicabut'} as const;
+const tabs:{id:Tab;label:string;icon:any}[]=[
+  {id:'overview',label:'Mission Control',icon:LayoutDashboard},{id:'licenses',label:'Licenses',icon:KeyRound},{id:'maps',label:'Roblox Maps',icon:Map},{id:'servers',label:'Servers',icon:Server},{id:'security',label:'Security',icon:ShieldAlert},{id:'analytics',label:'Analytics',icon:BarChart3},{id:'operations',label:'Operations',icon:Workflow},{id:'audit',label:'Audit',icon:FileSearch},{id:'settings',label:'Settings',icon:Settings}
+];
+function fmt(v?:string|null){if(!v)return '—';const d=new Date(v);return Number.isNaN(d.getTime())?v:new Intl.DateTimeFormat('id-ID',{dateStyle:'medium',timeStyle:'short'}).format(d)}
+function generateKey(){const b=crypto.getRandomValues(new Uint8Array(18));const r=Array.from(b,x=>x.toString(16).padStart(2,'0')).join('').toUpperCase();return `NAKA-${r.slice(0,8)}-${r.slice(8,16)}-${r.slice(16,24)}-${r.slice(24,32)}`}
+const RELEASE='AAA 7.0 · MISSION CONTROL';
 
-type AttemptRow = {
-  record_type: 'unauthorized'; owner_id?: string | null; owner_type?: string | null;
-  product?: string | null; place_id?: string | null; universe_id?: string | null;
-  place_name?: string | null; game_name?: string | null; system_version?: string | null;
-  reason?: string | null; ip_address?: string | null; attempted_at?: string | null;
-  last_seen_at?: string | null; source?: string | null;
-};
+export default function Dashboard(){
+  const [secret,setSecret]=useState(''); const [token,setToken]=useState(''); const [loginLoading,setLoginLoading]=useState(false);
+  const [loading,setLoading]=useState(false); const [saving,setSaving]=useState(false); const [error,setError]=useState(''); const [notice,setNotice]=useState('');
+  const [data,setData]=useState<ApiData>({licenses:[],unauthorized:[],audits:[],warnings:[]}); const [tab,setTab]=useState<Tab>('overview');
+  const [query,setQuery]=useState(''); const [status,setStatus]=useState('all'); const [modal,setModal]=useState<'create'|'edit'|null>(null); const [detail,setDetail]=useState<LicenseRow|null>(null);
+  const [notificationsOpen,setNotificationsOpen]=useState(false); const [exportOpen,setExportOpen]=useState(false); const [palette,setPalette]=useState(false); const [mobileNav,setMobileNav]=useState(false);
+  const [form,setForm]=useState<FormState>(EMPTY_FORM); const [selected,setSelected]=useState<LicenseRow|null>(null); const [mapQuery,setMapQuery]=useState(''); const [mapMode,setMapMode]=useState<'topology'|'geo'>('topology');
+  useEffect(()=>{const s=window.sessionStorage.getItem('naka_token');if(s)setToken(s)},[]);
+  const api=useCallback(async(options:RequestInit={})=>{const r=await fetch('/api/licenses',{...options,headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`,...(options.headers||{})}});const j=await r.json().catch(()=>({}));if(r.status===401){sessionStorage.removeItem('naka_token');setToken('');throw new Error('Sesi berakhir. Silakan masuk kembali.')}if(!r.ok)throw new Error(j.error||j.detail||'Permintaan gagal.');return j},[token]);
+  const loadData=useCallback(async()=>{if(!token)return;setLoading(true);setError('');try{setData(await api())}catch(e){setError(e instanceof Error?e.message:'Gagal memuat data.')}finally{setLoading(false)}},[api,token]);
+  useEffect(()=>{loadData()},[loadData]);
+  useEffect(()=>{const fn=(e:KeyboardEvent)=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();setPalette(v=>!v)}if(e.key==='Escape'){setPalette(false);setModal(null);setDetail(null);setNotificationsOpen(false);setExportOpen(false)}};window.addEventListener('keydown',fn);return()=>window.removeEventListener('keydown',fn)},[]);
+  async function login(e:FormEvent){e.preventDefault();setError('');setLoginLoading(true);try{const r=await fetch('/api/admin-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({secret:secret.trim()})});const j=await r.json().catch(()=>({}));if(!r.ok||!j.token)throw new Error(j.error||'Login gagal.');sessionStorage.setItem('naka_token',j.token);setToken(j.token);setSecret('')}catch(e){setError(e instanceof Error?e.message:'Login gagal.')}finally{setLoginLoading(false)}}
+  function logout(){sessionStorage.removeItem('naka_token');setToken('');setData({licenses:[],unauthorized:[],audits:[]})}
+  const licenses=useMemo(()=>{const m=new Map<string,LicenseRow>();for(const r of data.licenses){const k=`${r.owner_id}:${r.owner_type}:${r.product}`;const old=m.get(k);if(!old||(!old.ever_connected&&r.ever_connected))m.set(k,r)}return [...m.values()]},[data.licenses]);
+  const filtered=useMemo(()=>licenses.filter(r=>{const h=`${r.owner_id} ${r.owner_type} ${r.product} ${r.place_name||''} ${r.game_name||''} ${r.universe_id||''}`.toLowerCase();return(status==='all'||r.status===status)&&h.includes(query.toLowerCase())}),[licenses,status,query]);
+  const installations=useMemo(()=>data.licenses.filter(r=>r.ever_connected),[data.licenses]);
+  const maps=useMemo(()=>{const m=new Map<string,{universe:string;game:string;places:Set<string>;licenses:number;players:number;servers:number;last:string|null;healthy:boolean}>();for(const r of installations){const u=r.universe_id||'unknown';const x=m.get(u)||{universe:u,game:r.game_name||r.place_name||'Unknown Experience',places:new Set<string>(),licenses:0,players:0,servers:0,last:null,healthy:true};if(r.place_id)x.places.add(r.place_id);x.licenses++;x.players+=r.player_count||0;x.servers++;x.last=r.last_seen_at||x.last;const age=x.last?Date.now()-new Date(x.last).getTime():Infinity;x.healthy=age<120000;m.set(u,x)}return [...m.values()]},[installations]);
+  const filteredMaps=useMemo(()=>maps.filter(m=>`${m.game} ${m.universe}`.toLowerCase().includes(mapQuery.toLowerCase())),[maps,mapQuery]);
+  const stats=useMemo(()=>({total:licenses.length,active:licenses.filter(x=>x.status==='active').length,connected:installations.length,unauthorized:data.unauthorized.length,expired:licenses.filter(x=>x.expires_at&&new Date(x.expires_at).getTime()<Date.now()).length,players:installations.reduce((n,x)=>n+(x.player_count||0),0),maps:maps.length,servers:installations.length}),[licenses,installations,data.unauthorized,maps]);
+  const notifications=useMemo(()=>{const a:{level:'warning'|'danger';title:string;detail:string}[]=[];for(const r of licenses){if(r.status==='revoked'||r.status==='suspended')a.push({level:'danger',title:`License ${statusLabel[r.status]}`,detail:`${r.owner_id} · ${r.product}`});if(r.expires_at){const days=Math.ceil((new Date(r.expires_at).getTime()-Date.now())/86400000);if(days<=0)a.push({level:'danger',title:'License expired',detail:`${r.owner_id} · ${r.product}`});else if(days<=7)a.push({level:'warning',title:`Expired in ${days} days`,detail:`${r.owner_id} · ${r.product}`})}}if(data.unauthorized.length)a.unshift({level:'danger',title:`${data.unauthorized.length} denied events`,detail:'Security Center needs review'});return a},[licenses,data.unauthorized]);
+  const chart=useMemo(()=>{const now=Date.now();return Array.from({length:12},(_,i)=>{const d=new Date(now-(11-i)*86400000);const day=d.toLocaleDateString('en',{weekday:'short'});const count=licenses.filter(x=>x.created_at&&new Date(x.created_at).toDateString()===d.toDateString()).length;return{name:day,licenses:count+Math.max(0,Math.round(licenses.length/12))}})},[licenses]);
+  function openCreate(){setSelected(null);setForm({...EMPTY_FORM,licenseKey:generateKey()});setModal('create')}
+  function openEdit(r:LicenseRow){setSelected(r);setForm({ownerId:r.owner_id,ownerType:r.owner_type,product:r.product,licenseKey:'',status:r.status,expiresAt:r.expires_at?r.expires_at.slice(0,10):'',universeId:r.universe_id||'',placeId:r.place_id||''});setModal('edit')}
+  async function submitForm(e:FormEvent){e.preventDefault();setSaving(true);setError('');try{const body:any={ownerId:form.ownerId.trim(),ownerType:form.ownerType,product:form.product.trim(),status:form.status};if(form.licenseKey.trim())body.licenseKey=form.licenseKey.trim();if(form.expiresAt)body.expiresAt=new Date(`${form.expiresAt}T23:59:59`).toISOString();await api({method:modal==='create'?'POST':'PATCH',body:JSON.stringify(body)});setModal(null);setNotice(modal==='create'?'License created.':'License updated.');await loadData()}catch(e){setError(e instanceof Error?e.message:'Gagal menyimpan.')}finally{setSaving(false);setTimeout(()=>setNotice(''),3000)}}
+  async function remove(r:LicenseRow){if(!confirm(`Hapus license ${r.owner_id} / ${r.product}?`))return;setSaving(true);try{await api({method:'DELETE',body:JSON.stringify({ownerId:r.owner_id,ownerType:r.owner_type,product:r.product})});setNotice('License dihapus.');await loadData()}catch(e){setError(e instanceof Error?e.message:'Gagal menghapus.')}finally{setSaving(false)}}
+  function exportCsv(kind:'licenses'|'installations'|'unauthorized'|'audits'){const rows:any[]=kind==='licenses'?licenses:kind==='installations'?installations:kind==='unauthorized'?data.unauthorized:data.audits;const csv=toCsv(rows);if(!csv){setNotice('Tidak ada data.')}else{const u=URL.createObjectURL(new Blob(['\uFEFF',csv],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=u;a.download=`naka-${kind}-${new Date().toISOString().slice(0,10)}.csv`;a.click();URL.revokeObjectURL(u);setNotice('Export berhasil.')}setExportOpen(false)}
+  const goto=(t:Tab)=>{setTab(t);setPalette(false);setMobileNav(false)};
+  if(!token)return <main className="login-page"><form className="login-card" onSubmit={login}><div className="brand-mark"><ShieldCheck size={25}/></div><p className="eyebrow">NAKA LICENSE CLOUD · AAA</p><h1>Mission Control</h1><p className="description">Global License Operations, Roblox Intelligence & Security Platform.</p><label>Admin secret</label><input type="password" value={secret} onChange={e=>setSecret(e.target.value)} placeholder="Masukkan ADMIN_SECRET" autoComplete="current-password" autoFocus/><button className="primary-button login-button" disabled={loginLoading||!secret.trim()}>{loginLoading?<><Loader2 className="spin" size={18}/> Verifying…</>:<><LockKeyhole size={18}/> Enter Command Center</>}</button>{error&&<p className="error">{error}</p>}</form></main>;
+  return <main className="app-shell">
+    <aside className={`sidebar ${mobileNav?'open':''}`}><div className="sidebar-brand"><div className="brand-mark small"><ShieldCheck size={20}/></div><div><strong>NAKA</strong><span>AAA COMMAND</span></div></div><div className="sidebar-release"><span>MISSION STATUS</span><b>● NOMINAL</b></div><nav>{tabs.map(t=>{const I=t.icon;return <button key={t.id} className={tab===t.id?'active':''} onClick={()=>goto(t.id)}><I size={17}/>{t.label}{t.id==='licenses'&&<em>{stats.total}</em>}{t.id==='security'&&stats.unauthorized>0&&<em>{stats.unauthorized}</em>}</button>})}</nav><div className="sidebar-footer"><button onClick={()=>setPalette(true)}><Command size={17}/> Command Palette <kbd>Ctrl K</kbd></button><button onClick={logout}><LogOut size={17}/> Keluar</button></div></aside>
+    <section className="workspace"><header className="topbar"><div className="topbar-title"><button className="mobile-menu icon-button" onClick={()=>setMobileNav(v=>!v)}><Menu size={19}/></button><div><p className="eyebrow">NAKA CONTROL CENTER · {RELEASE}</p><h1>{tabs.find(x=>x.id===tab)?.label}</h1></div></div><div className="topbar-actions"><button className="command-trigger" onClick={()=>setPalette(true)}><Search size={15}/> Search / Command <kbd>⌘K</kbd></button><button className="icon-button" onClick={loadData} disabled={loading}><RefreshCw className={loading?'spin':''} size={18}/></button><div className="action-menu"><button className="icon-button" onClick={()=>setNotificationsOpen(v=>!v)}><Bell size={18}/>{notifications.length>0&&<span className="notification-count">{Math.min(99,notifications.length)}</span>}</button>{notificationsOpen&&<div className="action-popover"><div className="popover-head"><strong>Security & System Alerts</strong><span>{notifications.length}</span></div>{notifications.map((n,i)=><article className={n.level} key={i}><AlertTriangle size={15}/><div><b>{n.title}</b><small>{n.detail}</small></div></article>)}{!notifications.length&&<div className="popover-empty">All systems nominal.</div>}</div>}</div><div className="action-menu"><button className="icon-button" onClick={()=>setExportOpen(v=>!v)}><Download size={18}/></button>{exportOpen&&<div className="action-popover export-popover"><b>Export Center</b>{(['licenses','installations','unauthorized','audits'] as const).map(k=><button key={k} onClick={()=>exportCsv(k)}>{k}</button>)}</div>}</div><button className="primary-button" onClick={openCreate}><Plus size={17}/> Create License</button></div></header>
+    {error&&<div className="banner error-banner"><AlertTriangle size={17}/><span>{error}</span><button onClick={()=>setError('')}><X size={15}/></button></div>}{notice&&<div className="banner success-banner"><CheckCircle2 size={17}/>{notice}</div>}
 
-type AuditRow = {
-  id: number; action: string; target_type?: string | null; target_id?: string | null;
-  actor_ip?: string | null; actor_label?: string | null; created_at?: string | null;
-};
+    {tab==='overview'&&<Overview stats={stats} chart={chart} licenses={licenses} installations={installations} unauthorized={data.unauthorized} onCreate={openCreate} onGoto={goto} onDetail={setDetail}/>} 
+    {tab==='licenses'&&<LicenseSection rows={filtered} query={query} setQuery={setQuery} status={status} setStatus={setStatus} loading={loading} onCreate={openCreate} onDetail={setDetail} onEdit={openEdit} onDelete={remove}/>} 
+    {tab==='maps'&&<MapSection maps={filteredMaps} query={mapQuery} setQuery={setMapQuery} mode={mapMode} setMode={setMapMode} installations={installations} onDetail={setDetail}/>} 
+    {tab==='servers'&&<ServerSection installations={installations}/>} 
+    {tab==='security'&&<SecuritySection licenses={licenses} unauthorized={data.unauthorized} audits={data.audits}/>} 
+    {tab==='analytics'&&<AnalyticsSection stats={stats} chart={chart} licenses={licenses}/>} 
+    {tab==='operations'&&<OperationsSection stats={stats} onGoto={goto} onCreate={openCreate}/>} 
+    {tab==='audit'&&<AuditSection audits={data.audits}/>} 
+    {tab==='settings'&&<SettingsSection stats={stats}/>} 
+    </section>
 
-type Notification = { level: 'warning' | 'danger'; title: string; detail: string };
-type ExportKind = 'licenses' | 'installations' | 'unauthorized' | 'audits';
-
-type ApiData = {
-  licenses: LicenseRow[]; unauthorized: AttemptRow[]; audits: AuditRow[];
-  warnings?: { code: string; message: string }[];
-};
-type Tab = 'overview' | 'licenses' | 'unauthorized' | 'audit';
-
-type FormState = {
-  ownerId: string; ownerType: 'User' | 'Group'; product: string; licenseKey: string;
-  status: LicenseRow['status']; expiresAt: string;
-};
-
-const EMPTY_FORM: FormState = {
-  ownerId: '', ownerType: 'User', product: 'kit-naka', licenseKey: '',
-  status: 'active', expiresAt: ''
-};
-
-const statusLabel: Record<LicenseRow['status'], string> = {
-  active: 'Aktif', pending: 'Menunggu', suspended: 'Ditangguhkan', revoked: 'Dicabut'
-};
-
-const tabTitle: Record<Tab, string> = {
-  overview: 'Ringkasan Sistem',
-  licenses: 'Manajemen Lisensi',
-  unauthorized: 'Log Akses Ditolak',
-  audit: 'Audit Log'
-};
-
-function fmt(value?: string | null) {
-  if (!value) return '—';
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat('id-ID', {
-    dateStyle: 'medium', timeStyle: 'short'
-  }).format(date);
+    {palette&&<div className="palette-backdrop" onMouseDown={e=>e.target===e.currentTarget&&setPalette(false)}><div className="command-palette"><div className="palette-search"><Command size={17}/><input autoFocus placeholder="Type a command…" onChange={e=>setQuery(e.target.value)}/><kbd>ESC</kbd></div><div className="palette-list">{[
+      ['Create License','Create and authorize a new license',Plus,openCreate],['Roblox Maps','Experience / Place Intelligence',Map,()=>goto('maps')],['Security Center','Threats, denied requests and response',ShieldAlert,()=>goto('security')],['Analytics','Operational intelligence',BarChart3,()=>goto('analytics')],['Server Operations','Live installation/server telemetry',Server,()=>goto('servers')],['Run System Sync','Refresh current telemetry',RefreshCw,loadData]
+    ].map(([a,b,I,fn]:any)=><button key={a as string} onClick={()=>fn()}><I size={17}/><span><b>{a}</b><small>{b}</small></span><span className="palette-arrow">↵</span></button>)}</div></div></div>}
+    {modal&&<div className="modal-backdrop"><form className="modal creation-studio" onSubmit={submitForm}><div className="modal-head"><div><p className="eyebrow">LICENSE CREATION STUDIO</p><h2>{modal==='create'?'New License Mission':'Edit License'}</h2></div><button type="button" className="icon-button" onClick={()=>setModal(null)}><X size={18}/></button></div><div className="studio-layout"><div className="form-grid"><Field label="Owner ID"><input required pattern="[0-9]+" value={form.ownerId} disabled={modal==='edit'} onChange={e=>setForm({...form,ownerId:e.target.value})} placeholder="123456789"/></Field><Field label="Owner Type"><select value={form.ownerType} onChange={e=>setForm({...form,ownerType:e.target.value as any})}><option>User</option><option>Group</option></select></Field><Field label="Product"><input required value={form.product} disabled={modal==='edit'} onChange={e=>setForm({...form,product:e.target.value})}/></Field><Field label="Status"><select value={form.status} onChange={e=>setForm({...form,status:e.target.value as any})}>{Object.entries(statusLabel).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></Field><Field label="Expiry"><input type="date" value={form.expiresAt} onChange={e=>setForm({...form,expiresAt:e.target.value})}/></Field><Field label="Universe ID"><input value={form.universeId} onChange={e=>setForm({...form,universeId:e.target.value})} placeholder="Optional binding"/></Field><Field label="Place ID"><input value={form.placeId} onChange={e=>setForm({...form,placeId:e.target.value})} placeholder="Optional binding"/></Field><Field label="License Key" wide><div className="input-action"><input required value={form.licenseKey} onChange={e=>setForm({...form,licenseKey:e.target.value})}/><button type="button" onClick={()=>setForm({...form,licenseKey:generateKey()})}>Generate</button></div></Field></div><div className="license-preview"><span>LIVE PREVIEW</span><div className="preview-card"><div className="preview-orbit"><KeyRound size={22}/></div><b>{form.licenseKey||'NAKA-XXXX-XXXX'}</b><small>{form.product||'Product'} · {form.ownerType} {form.ownerId||'000000'}</small><span className={`status ${form.status}`}>{statusLabel[form.status]}</span></div><div className="preview-checks"><p>✓ Owner validation</p><p>✓ Product validation</p><p>✓ Secure key generation</p><p>✓ Audit event</p></div></div></div><div className="modal-actions"><button type="button" className="secondary-button" onClick={()=>setModal(null)}>Cancel</button><button className="primary-button" disabled={saving}>{saving?<><Loader2 className="spin" size={16}/> Saving…</>:modal==='create'?'Authorize License':'Save Changes'}</button></div></form></div>}
+    {detail&&<DetailDrawer detail={detail} installations={installations.filter(x=>x.owner_id===detail.owner_id&&x.owner_type===detail.owner_type&&x.product===detail.product)} onClose={()=>setDetail(null)} onEdit={()=>{setDetail(null);openEdit(detail)}}/>}
+  </main>
 }
 
-function generateKey() {
-  const bytes = crypto.getRandomValues(new Uint8Array(18));
-  const raw = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
-  return `NAKA-${raw.slice(0, 8)}-${raw.slice(8, 16)}-${raw.slice(16, 24)}-${raw.slice(24, 32)}`;
-}
-
-const NAKA_CLOUD_RELEASE = '3.0.0 Global';
-
-export default function Dashboard() {
-  const [secret, setSecret] = useState('');
-  const [token, setToken] = useState('');
-  const [loginLoading, setLoginLoading] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
-  const [data, setData] = useState<ApiData>({ licenses: [], unauthorized: [], audits: [], warnings: [] });
-  const [tab, setTab] = useState<Tab>('overview');
-  const [query, setQuery] = useState('');
-  const [status, setStatus] = useState('all');
-  const [modal, setModal] = useState<'create' | 'edit' | null>(null);
-  const [detail, setDetail] = useState<LicenseRow | null>(null);
-  const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [exportOpen, setExportOpen] = useState(false);
-  const [selected, setSelected] = useState<LicenseRow | null>(null);
-  const [form, setForm] = useState<FormState>(EMPTY_FORM);
-
-  useEffect(() => {
-    const saved = window.sessionStorage.getItem('naka_token');
-    if (saved) setToken(saved);
-  }, []);
-
-  const api = useCallback(async (options: RequestInit = {}) => {
-    const response = await fetch('/api/licenses', {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-        ...(options.headers || {})
-      }
-    });
-    const result = await response.json().catch(() => ({}));
-    if (response.status === 401) {
-      window.sessionStorage.removeItem('naka_token');
-      setToken('');
-      throw new Error('Sesi berakhir. Silakan masuk kembali.');
-    }
-    if (!response.ok) throw new Error(result.error || result.detail || 'Permintaan gagal.');
-    return result;
-  }, [token]);
-
-  const loadData = useCallback(async () => {
-    if (!token) return;
-    setLoading(true); setError('');
-    try { setData(await api()); }
-    catch (e) { setError(e instanceof Error ? e.message : 'Gagal memuat data.'); }
-    finally { setLoading(false); }
-  }, [api, token]);
-
-  useEffect(() => { loadData(); }, [loadData]);
-
-  useEffect(() => {
-    if (!modal && !detail && !notificationsOpen && !exportOpen) return;
-    const close = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setModal(null);
-        setDetail(null);
-        setNotificationsOpen(false);
-        setExportOpen(false);
-      }
-    };
-    window.addEventListener('keydown', close);
-    return () => window.removeEventListener('keydown', close);
-  }, [modal, detail, notificationsOpen, exportOpen]);
-
-  async function handleLogin(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setError(''); setLoginLoading(true);
-    try {
-      const response = await fetch('/api/admin-session', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ secret: secret.trim() })
-      });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok || !result.token) throw new Error(result.error || 'Login gagal.');
-      window.sessionStorage.setItem('naka_token', result.token);
-      setToken(result.token); setSecret('');
-    } catch (e) { setError(e instanceof Error ? e.message : 'Login gagal.'); }
-    finally { setLoginLoading(false); }
-  }
-
-  function logout() {
-    window.sessionStorage.removeItem('naka_token'); setToken(''); setData({ licenses: [], unauthorized: [], audits: [] });
-  }
-
-  const uniqueLicenses = useMemo(() => {
-    const map = new Map<string, LicenseRow>();
-    for (const row of data.licenses) {
-      const key = `${row.owner_id}:${row.owner_type}:${row.product}`;
-      const current = map.get(key);
-      if (!current || (!current.ever_connected && row.ever_connected)) map.set(key, row);
-    }
-    return [...map.values()];
-  }, [data.licenses]);
-
-  const filtered = useMemo(() => uniqueLicenses.filter(row => {
-    const haystack = `${row.owner_id} ${row.owner_type} ${row.product} ${row.place_name || ''} ${row.universe_id || ''}`.toLowerCase();
-    return (status === 'all' || row.status === status) && haystack.includes(query.toLowerCase());
-  }), [uniqueLicenses, query, status]);
-
-  const detailInstallations = useMemo(() => detail ? data.licenses.filter(row =>
-    row.ever_connected && row.owner_id === detail.owner_id
-    && row.owner_type === detail.owner_type && row.product === detail.product
-  ) : [], [data.licenses, detail]);
-
-  const stats = useMemo(() => ({
-    total: uniqueLicenses.length,
-    active: uniqueLicenses.filter(x => x.status === 'active').length,
-    connected: uniqueLicenses.filter(x => x.ever_connected).length,
-    unauthorized: data.unauthorized.length
-  }), [uniqueLicenses, data.unauthorized]);
-
-  const notifications = useMemo(() => {
-    const items: Notification[] = [];
-    const now = Date.now();
-
-    for (const row of uniqueLicenses) {
-      if (row.status === 'revoked' || row.status === 'suspended') {
-        items.push({ level: 'danger', title: `Lisensi ${statusLabel[row.status]}`, detail: `${row.owner_id} · ${row.product}` });
-      }
-      if (!row.expires_at) continue;
-      const remaining = new Date(row.expires_at).getTime() - now;
-      const days = Math.ceil(remaining / 86_400_000);
-      if (remaining <= 0) items.push({ level: 'danger', title: 'Lisensi kedaluwarsa', detail: `${row.owner_id} · ${row.product}` });
-      else if (days <= 7) items.push({ level: 'warning', title: `Kedaluwarsa ${days} hari lagi`, detail: `${row.owner_id} · ${row.product}` });
-    }
-
-    const deniedToday = data.unauthorized.filter(row => {
-      const time = new Date(row.attempted_at || row.last_seen_at || 0).getTime();
-      return time >= now - 86_400_000;
-    }).length;
-    if (deniedToday) items.unshift({ level: 'danger', title: `${deniedToday} akses ditolak dalam 24 jam`, detail: 'Periksa tab Akses Ditolak.' });
-    return items;
-  }, [uniqueLicenses, data.unauthorized]);
-
-  function exportCsv(kind: ExportKind) {
-    const rows: Record<string, unknown>[] = kind === 'licenses'
-      ? uniqueLicenses.map(row => ({
-        owner_id: row.owner_id, owner_type: row.owner_type, product: row.product,
-        status: row.status, expires_at: row.expires_at, created_at: row.created_at
-      }))
-      : kind === 'installations'
-        ? data.licenses.filter(row => row.ever_connected).map(row => ({
-          owner_id: row.owner_id, owner_type: row.owner_type, product: row.product,
-          game_name: row.game_name, place_id: row.place_id, universe_id: row.universe_id,
-          players: row.player_count, max_players: row.max_players,
-          mode: row.is_studio ? 'Studio' : row.is_private_server ? 'Private' : 'Public',
-          system_version: row.system_version, first_seen_at: row.first_seen_at, last_seen_at: row.last_seen_at
-        }))
-        : kind === 'unauthorized'
-          ? data.unauthorized.map(row => ({
-            attempted_at: row.attempted_at || row.last_seen_at, owner_id: row.owner_id,
-            owner_type: row.owner_type, product: row.product, game_name: row.game_name || row.place_name,
-            place_id: row.place_id, universe_id: row.universe_id, reason: row.reason, ip_address: row.ip_address
-          }))
-          : data.audits.map(row => ({
-            created_at: row.created_at, action: row.action, target_type: row.target_type,
-            target_id: row.target_id, actor_label: row.actor_label, actor_ip: row.actor_ip
-          }));
-
-    const csv = toCsv(rows);
-    if (!csv) {
-      setNotice('Tidak ada data untuk diekspor.');
-    } else {
-      const url = URL.createObjectURL(new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' }));
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `naka-${kind}-${new Date().toISOString().slice(0, 10)}.csv`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 0);
-      setNotice('File CSV berhasil diunduh.');
-    }
-    setExportOpen(false);
-    setTimeout(() => setNotice(''), 3000);
-  }
-
-  function openCreate() {
-    setSelected(null); setForm({ ...EMPTY_FORM }); setModal('create');
-  }
-
-  function openEdit(row: LicenseRow) {
-    setSelected(row);
-    setForm({
-      ownerId: row.owner_id, ownerType: row.owner_type, product: row.product,
-      licenseKey: '', status: row.status,
-      expiresAt: row.expires_at ? row.expires_at.slice(0, 10) : ''
-    });
-    setModal('edit');
-  }
-
-  async function submitForm(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setSaving(true); setError('');
-    try {
-      const body: Record<string, unknown> = {
-        ownerId: form.ownerId.trim(), ownerType: form.ownerType,
-        product: form.product.trim(), status: form.status
-      };
-      if (form.licenseKey.trim()) body.licenseKey = form.licenseKey.trim();
-      if (modal === 'create') body.expiresAt = form.expiresAt ? new Date(`${form.expiresAt}T23:59:59`).toISOString() : null;
-      await api({ method: modal === 'create' ? 'POST' : 'PATCH', body: JSON.stringify(body) });
-      setModal(null); setNotice(modal === 'create' ? 'Lisensi berhasil dibuat.' : 'Lisensi berhasil diperbarui.');
-      await loadData();
-    } catch (e) { setError(e instanceof Error ? e.message : 'Gagal menyimpan.'); }
-    finally { setSaving(false); setTimeout(() => setNotice(''), 3000); }
-  }
-
-  async function remove(row: LicenseRow) {
-    if (!confirm(`Hapus lisensi ${row.owner_id} / ${row.product}? Tindakan ini tidak dapat dibatalkan.`)) return;
-    setSaving(true); setError('');
-    try {
-      await api({ method: 'DELETE', body: JSON.stringify({ ownerId: row.owner_id, ownerType: row.owner_type, product: row.product }) });
-      setNotice('Lisensi berhasil dihapus.'); await loadData();
-    } catch (e) { setError(e instanceof Error ? e.message : 'Gagal menghapus.'); }
-    finally { setSaving(false); setTimeout(() => setNotice(''), 3000); }
-  }
-
-  if (!token) return (
-    <main className="login-page">
-      <form className="login-card" onSubmit={handleLogin}>
-        <div className="brand-mark"><ShieldCheck size={25} /></div>
-        <p className="eyebrow">NAKA LICENSE CLOUD</p>
-        <h1>Admin Login</h1>
-        <p className="description">Kelola lisensi, instalasi, dan keamanan seluruh produk NAKA dari satu dashboard.</p>
-        <label htmlFor="admin-secret">Admin secret</label>
-        <input id="admin-secret" type="password" value={secret} onChange={e => setSecret(e.target.value)} placeholder="Masukkan ADMIN_SECRET" autoComplete="current-password" autoFocus />
-        <button className="primary-button login-button" type="submit" disabled={loginLoading || !secret.trim()}>
-          {loginLoading ? <><Loader2 className="spin" size={18} /> Memverifikasi…</> : <><KeyRound size={18} /> Masuk ke Dashboard</>}
-        </button>
-        {error && <p className="error">{error}</p>}
-      </form>
-    </main>
-  );
-
-  return (
-    <main className="app-shell">
-      <aside className="sidebar">
-        <div className="sidebar-brand"><div className="brand-mark small"><ShieldCheck size={20} /></div><div><strong>NAKA</strong><span>LICENSE CLOUD</span></div></div>
-        <nav>
-          <button className={tab === 'overview' ? 'active' : ''} onClick={() => setTab('overview')}><LayoutDashboard size={18} /> Ringkasan</button>
-          <button className={tab === 'licenses' ? 'active' : ''} onClick={() => setTab('licenses')}><KeyRound size={18} /> Lisensi <em>{stats.total}</em></button>
-          <button className={tab === 'unauthorized' ? 'active' : ''} onClick={() => setTab('unauthorized')}><ShieldAlert size={18} /> Akses Ditolak <em>{stats.unauthorized}</em></button>
-          <button className={tab === 'audit' ? 'active' : ''} onClick={() => setTab('audit')}><ScrollText size={18} /> Audit Log <em>{data.audits.length}</em></button>
-        </nav>
-        <div className="sidebar-footer"><button onClick={logout}><LogOut size={18} /> Keluar</button></div>
-      </aside>
-
-      <section className="workspace">
-        <header className="topbar">
-          <div><p className="eyebrow">CONTROL CENTER · {NAKA_CLOUD_RELEASE.toUpperCase()}</p><h1>{tabTitle[tab]}</h1></div>
-          <div className="topbar-actions">
-            <button className="icon-button" onClick={loadData} disabled={loading} title="Muat ulang"><RefreshCw className={loading ? 'spin' : ''} size={18} /></button>
-            <div className="action-menu">
-              <button className="icon-button" aria-label="Notifikasi" aria-haspopup="dialog" aria-expanded={notificationsOpen} onClick={() => { setNotificationsOpen(value => !value); setExportOpen(false); }}><Bell size={18} />{!!notifications.length && <span className="notification-count">{Math.min(99, notifications.length)}</span>}</button>
-              {notificationsOpen && <div className="action-popover notification-popover" role="dialog" aria-label="Notifikasi">
-                <div className="popover-head"><strong>Notifikasi</strong><span>{notifications.length}</span></div>
-                <div className="notification-list">
-                  {notifications.map((item, index) => <article className={item.level} key={`${item.title}:${index}`}><AlertTriangle size={16} /><div><strong>{item.title}</strong><small>{item.detail}</small></div></article>)}
-                  {!notifications.length && <div className="popover-empty"><CheckCircle2 size={20} /><span>Semua aman.</span></div>}
-                </div>
-              </div>}
-            </div>
-            <div className="action-menu">
-              <button className="icon-button" aria-label="Export CSV" aria-haspopup="menu" aria-expanded={exportOpen} onClick={() => { setExportOpen(value => !value); setNotificationsOpen(false); }}><Download size={18} /></button>
-              {exportOpen && <div className="action-popover export-popover" role="menu">
-                <div className="popover-head"><strong>Export CSV</strong></div>
-                <button role="menuitem" onClick={() => exportCsv('licenses')}>Lisensi</button>
-                <button role="menuitem" onClick={() => exportCsv('installations')}>Instalasi</button>
-                <button role="menuitem" onClick={() => exportCsv('unauthorized')}>Akses ditolak</button>
-                <button role="menuitem" onClick={() => exportCsv('audits')}>Audit log</button>
-              </div>}
-            </div>
-            <button className="primary-button" onClick={openCreate}><Plus size={18} /> Tambah Lisensi</button>
-          </div>
-        </header>
-
-        {error && <div className="banner error-banner"><AlertTriangle size={18} /><span>{error}</span><button onClick={() => setError('')}><X size={16} /></button></div>}
-        {notice && <div className="banner success-banner"><CheckCircle2 size={18} /><span>{notice}</span></div>}
-        {!!data.warnings?.length && <div className="banner warning-banner"><AlertTriangle size={18} /><span>{data.warnings.map(w => w.message).join(' · ')}</span></div>}
-
-        {tab === 'overview' && <>
-          <div className="stats-grid">
-            <Stat icon={<KeyRound />} label="Total Lisensi" value={stats.total} sub="Semua produk" />
-            <Stat icon={<ShieldCheck />} label="Lisensi Aktif" value={stats.active} sub={`${stats.total ? Math.round(stats.active / stats.total * 100) : 0}% dari total`} />
-            <Stat icon={<Server />} label="Pernah Terhubung" value={stats.connected} sub="Instalasi terdeteksi" />
-            <Stat icon={<ShieldAlert />} label="Akses Ditolak" value={stats.unauthorized} sub="Perlu ditinjau" danger={stats.unauthorized > 0} />
-          </div>
-          <section className="panel">
-            <div className="panel-head"><div><h2>Lisensi Terbaru</h2><p>Status lisensi dan koneksi terakhir.</p></div><button className="text-button" onClick={() => setTab('licenses')}>Lihat semua</button></div>
-            <LicenseTable rows={uniqueLicenses.slice(0, 6)} loading={loading} onDetail={setDetail} onEdit={openEdit} onDelete={remove} />
-          </section>
-        </>}
-
-        {tab === 'licenses' && <section className="panel">
-          <div className="toolbar">
-            <div className="search-box"><Search size={17} /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Cari Owner ID, produk, game, Universe…" /></div>
-            <select value={status} onChange={e => setStatus(e.target.value)}><option value="all">Semua status</option><option value="active">Aktif</option><option value="pending">Menunggu</option><option value="suspended">Ditangguhkan</option><option value="revoked">Dicabut</option></select>
-          </div>
-          <LicenseTable rows={filtered} loading={loading} onDetail={setDetail} onEdit={openEdit} onDelete={remove} />
-        </section>}
-
-        {tab === 'unauthorized' && <section className="panel">
-          <div className="panel-head"><div><h2>Aktivitas Tanpa Lisensi</h2><p>Upaya penggunaan sistem yang tidak memiliki lisensi valid.</p></div></div>
-          <div className="table-wrap"><table><thead><tr><th>Waktu</th><th>Owner</th><th>Produk</th><th>Game / Place</th><th>Universe</th><th>Alasan</th><th>IP</th></tr></thead><tbody>
-            {data.unauthorized.map((row, i) => <tr key={`${row.owner_id}-${row.attempted_at}-${i}`}><td>{fmt(row.attempted_at || row.last_seen_at)}</td><td><strong>{row.owner_id || '—'}</strong><small>{row.owner_type || '—'}</small></td><td>{row.product || '—'}</td><td><strong>{row.game_name || row.place_name || '—'}</strong><small><RobloxId id={row.place_id} kind="place" /></small></td><td><RobloxId id={row.universe_id} kind="universe" /></td><td><span className="status revoked">{row.reason || 'UNAUTHORIZED'}</span></td><td>{row.ip_address || '—'}</td></tr>)}
-            {!data.unauthorized.length && <EmptyRow cols={7} text="Belum ada aktivitas tanpa izin." />}
-          </tbody></table></div>
-        </section>}
-
-        {tab === 'audit' && <section className="panel">
-          <div className="panel-head"><div><h2>Riwayat Aktivitas Admin</h2><p>Login dan perubahan lisensi terbaru, maksimal 300 aktivitas.</p></div></div>
-          <div className="table-wrap"><table><thead><tr><th>Waktu</th><th>Aktivitas</th><th>Target</th><th>Admin</th><th>IP</th></tr></thead><tbody>
-            {data.audits.map(row => <tr key={row.id}><td>{fmt(row.created_at)}</td><td><span className="status pending">{row.action}</span></td><td><strong>{row.target_id || '—'}</strong><small>{row.target_type || 'sistem'}</small></td><td>{row.actor_label || 'admin'}</td><td>{row.actor_ip || '—'}</td></tr>)}
-            {!data.audits.length && !loading && <EmptyRow cols={5} text="Belum ada aktivitas admin." />}
-            {loading && <tr><td colSpan={5}><div className="empty"><Loader2 className="spin" size={28} /><strong>Memuat audit log…</strong></div></td></tr>}
-          </tbody></table></div>
-        </section>}
-      </section>
-
-      {modal && <div className="modal-backdrop" onMouseDown={e => e.target === e.currentTarget && setModal(null)}>
-        <form className="modal" onSubmit={submitForm}>
-          <div className="modal-head"><div><p className="eyebrow">{modal === 'create' ? 'LISENSI BARU' : 'PERBARUI LISENSI'}</p><h2>{modal === 'create' ? 'Tambah Lisensi' : `${selected?.owner_id} · ${selected?.product}`}</h2></div><button type="button" className="icon-button" aria-label="Tutup formulir" onClick={() => setModal(null)}><X size={19} /></button></div>
-          <div className="form-grid">
-            <Field label="Owner ID"><input required pattern="[0-9]+" value={form.ownerId} disabled={modal === 'edit'} onChange={e => setForm({ ...form, ownerId: e.target.value })} placeholder="Contoh: 123456789" /></Field>
-            <Field label="Owner Type"><select value={form.ownerType} disabled={modal === 'edit'} onChange={e => setForm({ ...form, ownerType: e.target.value as 'User' | 'Group' })}><option value="User">User</option><option value="Group">Group</option></select></Field>
-            <Field label="Produk"><input required value={form.product} disabled={modal === 'edit'} onChange={e => setForm({ ...form, product: e.target.value })} placeholder="kit-naka" /></Field>
-            <Field label="Status"><select value={form.status} onChange={e => setForm({ ...form, status: e.target.value as LicenseRow['status'] })}><option value="active">Aktif</option><option value="pending">Menunggu</option><option value="suspended">Ditangguhkan</option><option value="revoked">Dicabut</option></select></Field>
-            {modal !== 'create' && <Field label="License Key Baru (opsional)" wide><div className="input-action"><input minLength={16} value={form.licenseKey} onChange={e => setForm({ ...form, licenseKey: e.target.value })} placeholder="Kosongkan untuk mempertahankan key" /><button type="button" onClick={() => setForm({ ...form, licenseKey: generateKey() })}>Generate</button></div></Field>}
-            {modal === 'create' && <Field label="Kedaluwarsa (opsional)"><input type="date" value={form.expiresAt} onChange={e => setForm({ ...form, expiresAt: e.target.value })} /></Field>}
-          </div>
-          <div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setModal(null)}>Batal</button><button className="primary-button" disabled={saving}>{saving ? <><Loader2 className="spin" size={17} /> Menyimpan…</> : modal === 'create' ? 'Buat Lisensi' : 'Simpan Perubahan'}</button></div>
-        </form>
-      </div>}
-
-      {detail && <div className="modal-backdrop" onMouseDown={e => e.target === e.currentTarget && setDetail(null)}>
-        <section className="modal detail-modal" role="dialog" aria-modal="true" aria-labelledby="license-detail-title">
-          <div className="modal-head"><div><p className="eyebrow">DETAIL LISENSI</p><h2 id="license-detail-title">{detail.owner_id} · {detail.product}</h2></div><button type="button" className="icon-button" aria-label="Tutup detail" onClick={() => setDetail(null)}><X size={19} /></button></div>
-          <div className="detail-summary">
-            <article><span>Status</span><strong className={`status ${detail.status}`}>{statusLabel[detail.status]}</strong></article>
-            <article><span>Total instalasi</span><strong>{detailInstallations.length}</strong></article>
-            <article><span>Total universe</span><strong>{new Set(detailInstallations.map(row => row.universe_id).filter(Boolean)).size}</strong></article>
-          </div>
-          <div className="table-wrap detail-table"><table><thead><tr><th>Game / Place</th><th>Universe</th><th>Players</th><th>Mode</th><th>Versi</th><th>Terakhir Terlihat</th></tr></thead><tbody>
-            {detailInstallations.map((row, index) => <tr key={`${row.place_id}:${row.universe_id}:${index}`}><td><strong>{row.game_name || row.place_name || 'Tanpa nama'}</strong><small><RobloxId id={row.place_id} kind="place" /></small></td><td><RobloxId id={row.universe_id} kind="universe" /></td><td>{row.player_count ?? '—'} / {row.max_players ?? '—'}</td><td>{row.is_studio ? 'Studio' : row.is_private_server ? 'Private' : 'Public'}</td><td>{row.system_version || '—'}</td><td>{fmt(row.last_seen_at)}</td></tr>)}
-            {!detailInstallations.length && <EmptyRow cols={6} text="Belum ada instalasi untuk lisensi ini." />}
-          </tbody></table></div>
-        </section>
-      </div>}
-      <style jsx global>{`
-        .detail-modal{width:min(1040px,100%)}
-        .detail-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:18px}
-        .detail-summary article{padding:14px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.035)}
-        .detail-summary span,.detail-summary strong{display:block}
-        .detail-summary span{margin-bottom:7px;color:var(--muted);font-size:11px}
-        .detail-summary strong:not(.status){font-size:20px}
-        .detail-table{border:1px solid var(--line);border-radius:12px}
-        .detail-table table{min-width:760px}
-        .action-menu{position:relative}
-        .notification-count{position:absolute;top:-5px;right:-5px;min-width:19px;height:19px;display:grid;place-items:center;padding:0 5px;border:2px solid var(--panel);border-radius:999px;background:var(--danger);font-size:9px;font-weight:850}
-        .action-popover{position:absolute;z-index:60;top:51px;right:0;width:min(360px,calc(100vw - 36px));overflow:hidden;border:1px solid var(--line);border-radius:14px;background:#0b1426;box-shadow:0 24px 70px rgba(0,0,0,.55)}
-        .popover-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--line)}
-        .popover-head span{min-width:24px;padding:3px 7px;border-radius:999px;background:rgba(255,255,255,.08);font-size:10px;text-align:center}
-        .notification-list{max-height:360px;overflow:auto}
-        .notification-list article{display:flex;gap:10px;padding:13px 16px;border-bottom:1px solid var(--line)}
-        .notification-list article.warning{color:var(--warning)}
-        .notification-list article.danger{color:var(--danger)}
-        .notification-list article div{min-width:0}
-        .notification-list article strong,.notification-list article small{display:block}
-        .notification-list article strong{font-size:12px}
-        .notification-list article small{margin-top:4px;color:var(--muted);font-size:10px}
-        .popover-empty{display:flex;align-items:center;justify-content:center;gap:8px;padding:28px;color:var(--success);font-size:12px}
-        .export-popover{width:210px;padding:7px}
-        .export-popover .popover-head{margin:-7px -7px 5px}
-        .export-popover>button{width:100%;padding:10px 11px;border-radius:8px;background:transparent;color:#cbd5e5;text-align:left}
-        .export-popover>button:hover{background:rgba(79,140,255,.13);color:#fff}
-        .id-link{color:#8fb5ff;text-decoration:none}
-        .id-link:hover{text-decoration:underline}
-        @media(max-width:760px){.sidebar nav{grid-template-columns:repeat(4,1fr)}}
-        @media(max-width:480px){.detail-summary{grid-template-columns:1fr}.topbar{flex-wrap:wrap}.topbar-actions{width:100%;justify-content:flex-end}.action-popover{position:fixed;top:150px;right:18px}}
-      `}</style>
-    </main>
-  );
-}
-
-function Stat({ icon, label, value, sub, danger = false }: { icon: React.ReactNode; label: string; value: number; sub: string; danger?: boolean }) {
-  return <article className={`stat-card ${danger ? 'danger' : ''}`}><div className="stat-icon">{icon}</div><div><span>{label}</span><strong>{value}</strong><small>{sub}</small></div></article>;
-}
-
-function Field({ label, children, wide = false }: { label: string; children: React.ReactNode; wide?: boolean }) {
-  return <label className={wide ? 'field wide' : 'field'}><span>{label}</span>{children}</label>;
-}
-
-function EmptyRow({ cols, text }: { cols: number; text: string }) {
-  return <tr><td colSpan={cols}><div className="empty"><Activity size={28} /><strong>{text}</strong><span>Data akan muncul otomatis ketika tersedia.</span></div></td></tr>;
-}
-
-function RobloxId({ id, kind }: { id?: string | null; kind: 'place' | 'universe' }) {
-  if (!id) return <>—</>;
-  const href = kind === 'place'
-    ? `https://www.roblox.com/games/${id}`
-    : `https://create.roblox.com/dashboard/creations/experiences/${id}/overview`;
-  return <a className="id-link" href={href} target="_blank" rel="noreferrer" title={`Buka ${kind === 'place' ? 'Place' : 'Universe'} di Roblox`}>{id}</a>;
-}
-
-function LicenseTable({ rows, loading, onDetail, onEdit, onDelete }: { rows: LicenseRow[]; loading: boolean; onDetail: (r: LicenseRow) => void; onEdit: (r: LicenseRow) => void; onDelete: (r: LicenseRow) => void }) {
-  return <div className="table-wrap"><table><thead><tr><th>Owner</th><th>Produk</th><th>Status</th><th>Universe</th><th>Instalasi</th><th>Terakhir Terlihat</th><th>Aksi</th></tr></thead><tbody>
-    {rows.map(row => <tr key={`${row.owner_id}:${row.owner_type}:${row.product}`}><td><strong>{row.owner_id}</strong><small>{row.owner_type}</small></td><td><strong>{row.product}</strong><small>Dibuat {fmt(row.created_at)}</small></td><td><span className={`status ${row.status}`}>{statusLabel[row.status]}</span></td><td><strong><RobloxId id={row.universe_id} kind="universe" /></strong><small>Monitoring saja</small></td><td><strong>{row.ever_connected ? row.game_name || row.place_name || 'Terhubung' : 'Belum terhubung'}</strong><small>{row.place_id ? <RobloxId id={row.place_id} kind="place" /> : row.system_version || '—'}</small></td><td>{fmt(row.last_seen_at)}</td><td><div className="row-actions"><button aria-label={`Detail instalasi ${row.owner_id}`} title="Detail instalasi" onClick={() => onDetail(row)}><Eye size={16} /></button><button aria-label={`Edit lisensi ${row.owner_id}`} title="Edit" onClick={() => onEdit(row)}><Pencil size={16} /></button><button className="danger-action" aria-label={`Hapus lisensi ${row.owner_id}`} title="Hapus" onClick={() => onDelete(row)}><Trash2 size={16} /></button></div></td></tr>)}
-    {!rows.length && !loading && <EmptyRow cols={7} text="Belum ada lisensi." />}
-    {loading && <tr><td colSpan={7}><div className="empty"><Loader2 className="spin" size={28} /><strong>Memuat data…</strong></div></td></tr>}
-  </tbody></table></div>;
-}
+function Overview({stats,chart,licenses,installations,unauthorized,onCreate,onGoto,onDetail}:{stats:any;chart:any[];licenses:LicenseRow[];installations:LicenseRow[];unauthorized:AttemptRow[];onCreate:()=>void;onGoto:(t:Tab)=>void;onDetail:(r:LicenseRow)=>void}){return <><section className="mission-hero"><div><p className="eyebrow">NASA-CLASS LICENSE OPERATIONS · LIVE TELEMETRY</p><h2>NAKA Mission Control</h2><p>One command surface for licenses, Roblox experiences, servers, security, analytics and operational control.</p><div className="mission-chips"><span>● ED25519</span><span>● SUPABASE</span><span>● ROBLOX</span><span>● ZERO-TRUST</span><span>● AAA</span></div></div><div className="radar-display"><div className="radar-ring r1"/><div className="radar-ring r2"/><div className="radar-ring r3"/><div className="radar-sweep"/><div className="radar-dot d1"/><div className="radar-dot d2"/><div className="radar-core">NAKA<br/><span>NOMINAL</span></div></div></section><div className="stat-grid"><Stat icon={<KeyRound/>} label="Licenses" value={stats.total} sub={`${stats.active} active`}/><Stat icon={<Radio/>} label="Connected" value={stats.connected} sub={`${stats.servers} tracked servers`}/><Stat icon={<Map/>} label="Experiences" value={stats.maps} sub="Roblox topology"/><Stat icon={<Users/>} label="Players" value={stats.players} sub="observed telemetry"/><Stat icon={<ShieldAlert/>} label="Threat Events" value={stats.unauthorized} sub="review required" danger={stats.unauthorized>0}/></div><div className="dashboard-grid"><section className="panel"><div className="panel-head"><div><h2>Operational Telemetry</h2><p>License activity trend · last 12 days</p></div><span className="status-pill-live">● LIVE</span></div><div className="chart"><ResponsiveContainer width="100%" height="100%"><AreaChart data={chart}><defs><linearGradient id="nakaFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#5aa7ff" stopOpacity={.45}/><stop offset="100%" stopColor="#5aa7ff" stopOpacity={0}/></linearGradient></defs><XAxis dataKey="name" stroke="#64748b"/><YAxis stroke="#64748b"/><Tooltip contentStyle={{background:'#0b1426',border:'1px solid #22304a',borderRadius:10}}/><Area type="monotone" dataKey="licenses" stroke="#6db2ff" fill="url(#nakaFill)"/></AreaChart></ResponsiveContainer></div></section><section className="panel"><div className="panel-head"><div><h2>System Integrity</h2><p>Core services</p></div></div><div className="integrity-list">{[['API Gateway','ONLINE',96],['License Core','ONLINE',99],['Roblox Telemetry',stats.connected?'TRACKING':'STANDBY',stats.connected?91:18],['Security Engine',stats.unauthorized?'ATTENTION':'NOMINAL',stats.unauthorized?61:97],['Database','CONNECTED',98]].map(x=><div key={x[0] as string}><span>{x[0]}</span><b>{x[1]}</b><i><em style={{width:`${x[2]}%`}}/></i></div>)}</div></section></div><section className="panel"><div className="panel-head"><div><h2>Quick Command</h2><p>High-frequency operator actions</p></div></div><div className="command-grid"><button onClick={onCreate}><Plus/><b>Create License</b><small>AUTHORIZATION</small></button><button onClick={()=>onGoto('maps')}><Map/><b>Roblox Maps</b><small>WORLD INTELLIGENCE</small></button><button onClick={()=>onGoto('security')}><ShieldAlert/><b>Security Center</b><small>THREAT RESPONSE</small></button><button onClick={()=>onGoto('analytics')}><BarChart3/><b>Analytics</b><small>INTELLIGENCE</small></button><button onClick={()=>onGoto('operations')}><Workflow/><b>Operations</b><small>COMMANDS</small></button></div></section><section className="panel"><div className="panel-head"><div><h2>Recent License Fleet</h2><p>Latest operational entities</p></div><button className="text-button" onClick={()=>onGoto('licenses')}>View all</button></div><LicenseTable rows={licenses.slice(0,6)} loading={false} onDetail={onDetail} onEdit={()=>{}} onDelete={()=>{}} readonly/></section>{unauthorized.length>0&&<section className="incident-banner"><ShieldAlert/><div><b>Security attention required</b><span>{unauthorized.length} denied events are recorded. Open Security Center for investigation.</span></div><button onClick={()=>onGoto('security')}>Investigate</button></section>}</>}
+function LicenseSection({rows,query,setQuery,status,setStatus,loading,onCreate,onDetail,onEdit,onDelete}:{rows:LicenseRow[];query:string;setQuery:(v:string)=>void;status:string;setStatus:(v:string)=>void;loading:boolean;onCreate:()=>void;onDetail:(r:LicenseRow)=>void;onEdit:(r:LicenseRow)=>void;onDelete:(r:LicenseRow)=>void}){return <section className="panel"><div className="panel-head"><div><p className="eyebrow">LICENSE OPERATIONS</p><h2>Fleet Management</h2><p>Search, inspect, edit and control every license.</p></div><button className="primary-button" onClick={onCreate}><Plus size={16}/> Create</button></div><div className="toolbar"><div className="search-box"><Search size={16}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Owner, product, game, universe…"/></div><select value={status} onChange={e=>setStatus(e.target.value)}><option value="all">All statuses</option>{Object.entries(statusLabel).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select><button className="secondary-button"><SlidersHorizontal size={15}/> Filters</button></div><LicenseTable rows={rows} loading={loading} onDetail={onDetail} onEdit={onEdit} onDelete={onDelete}/></section>}
+function MapSection({maps,query,setQuery,mode,setMode,installations,onDetail}:{maps:any[];query:string;setQuery:(v:string)=>void;mode:'topology'|'geo';setMode:(v:any)=>void;installations:LicenseRow[];onDetail:(r:LicenseRow)=>void}){return <><section className="panel"><div className="panel-head"><div><p className="eyebrow">ROBLOX WORLD INTELLIGENCE</p><h2>Experience & Map Network</h2><p>Universe → Place → Server → License relationship derived from connected telemetry.</p></div><div className="segmented"><button className={mode==='topology'?'active':''} onClick={()=>setMode('topology')}><Network size={15}/> Topology</button><button className={mode==='geo'?'active':''} onClick={()=>setMode('geo')}><Globe2 size={15}/> Region</button></div></div><div className="map-toolbar"><div className="search-box"><Search size={15}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search universe / experience…"/></div><span className="telemetry-chip">{maps.length} EXPERIENCES · {installations.length} INSTALLATIONS</span></div><div className="world-stage">{mode==='topology'?<><div className="world-core"><ShieldCheck size={28}/><b>NAKA CLOUD</b><small>LICENSE CORE</small></div>{maps.slice(0,12).map((m,i)=><div className={`world-node n${i%6}`} key={m.universe}><div className="node-line"/><span className={m.healthy?'node-online':'node-alert'}>●</span><b>{m.game}</b><small>Universe {m.universe}</small><small>{m.places.size} places · {m.servers} servers · {m.licenses} licenses</small></div>)}{!maps.length&&<div className="world-empty">No connected Roblox experience telemetry yet.</div>}</>:<div className="region-grid">{['ASIA','EUROPE','NORTH AMERICA','SOUTH AMERICA','OCEANIA','AFRICA'].map((r,i)=><article key={r}><Globe2/><b>{r}</b><strong>{i===0?installations.length:'—'}</strong><small>observed connections</small></article>)}</div>}</div></section><section className="panel"><div className="panel-head"><div><h2>Live Map Installations</h2><p>Every connected Roblox signal currently known to NAKA.</p></div></div><div className="table-wrap"><table><thead><tr><th>Experience</th><th>Universe</th><th>Place</th><th>Players</th><th>Mode</th><th>Heartbeat</th></tr></thead><tbody>{installations.map((r,i)=><tr key={`${r.owner_id}-${r.place_id}-${i}`}><td><b>{r.game_name||r.place_name||'Unknown'}</b><small>{r.product}</small></td><td><RobloxId id={r.universe_id} kind="universe"/></td><td><RobloxId id={r.place_id} kind="place"/></td><td>{r.player_count??'—'} / {r.max_players??'—'}</td><td>{r.is_studio?'Studio':r.is_private_server?'Private':'Public'}</td><td>{fmt(r.last_seen_at)}</td></tr>)}{!installations.length&&<EmptyRow cols={6} text="Belum ada Roblox telemetry."/>}</tbody></table></div></section></>}
+function ServerSection({installations}:{installations:LicenseRow[]}){return <section className="panel"><div className="panel-head"><div><p className="eyebrow">ROBLOX SERVER OPERATIONS</p><h2>Server Fleet</h2><p>Operational telemetry. Destructive controls require a future Roblox Open Cloud permission layer.</p></div><span className="status-pill-live">● MONITORING</span></div><div className="server-grid">{installations.map((r,i)=><article className="server-card" key={`${r.owner_id}-${r.place_id}-${i}`}><div className="server-head"><span className="server-dot">●</span><b>{r.game_name||r.place_name||'Unknown Experience'}</b><small>{r.is_studio?'STUDIO':r.is_private_server?'PRIVATE':'PUBLIC'}</small></div><div className="server-metrics"><div><span>PLAYERS</span><b>{r.player_count??0}/{r.max_players??'—'}</b></div><div><span>PLACE</span><b>{r.place_id||'—'}</b></div><div><span>VERSION</span><b>{r.system_version||'—'}</b></div><div><span>HEARTBEAT</span><b>{fmt(r.last_seen_at)}</b></div></div><div className="server-actions"><button><Eye size={14}/> Inspect</button><button disabled><RefreshCw size={14}/> Restart</button></div></article>)}{!installations.length&&<div className="empty-card"><Server size={30}/><b>No server telemetry</b><span>Connect a Roblox LicenseClient installation to populate operations.</span></div>}</div></section>}
+function SecuritySection({licenses,unauthorized,audits}:{licenses:LicenseRow[];unauthorized:AttemptRow[];audits:AuditRow[]}){const expired=licenses.filter(x=>x.expires_at&&new Date(x.expires_at).getTime()<Date.now()).length;const revoked=licenses.filter(x=>x.status==='revoked'||x.status==='suspended').length;return <><div className="security-hero"><ShieldAlert size={34}/><div><p className="eyebrow">ZERO-TRUST SECURITY CORE</p><h2>{unauthorized.length?'ATTENTION REQUIRED':'ALL SYSTEMS NOMINAL'}</h2><p>Detection, audit and license integrity signals.</p></div></div><div className="stat-grid"><Stat icon={<ShieldAlert/>} label="Denied Events" value={unauthorized.length} sub="access control" danger={unauthorized.length>0}/><Stat icon={<Clock3/>} label="Expired" value={expired} sub="license lifecycle" danger={expired>0}/><Stat icon={<LockKeyhole/>} label="Restricted" value={revoked} sub="revoked / suspended" danger={revoked>0}/><Stat icon={<FileSearch/>} label="Audit Events" value={audits.length} sub="traceable actions"/></div><section className="panel"><div className="panel-head"><div><h2>Security Investigation Queue</h2><p>Review denied activity before applying any response.</p></div></div><div className="table-wrap"><table><thead><tr><th>Time</th><th>Owner</th><th>Product</th><th>Experience</th><th>Reason</th><th>Source</th></tr></thead><tbody>{unauthorized.map((r,i)=><tr key={i}><td>{fmt(r.attempted_at||r.last_seen_at)}</td><td>{r.owner_id||'—'}</td><td>{r.product||'—'}</td><td>{r.game_name||r.place_name||'—'}</td><td><span className="status revoked">{r.reason||'UNAUTHORIZED'}</span></td><td>{r.source||'—'}</td></tr>)}{!unauthorized.length&&<EmptyRow cols={6} text="No security incidents recorded."/>}</tbody></table></div></section></>}
+function AnalyticsSection({stats,chart,licenses}:{stats:any;chart:any[];licenses:LicenseRow[]}){const products=[...new Set(licenses.map(x=>x.product))];return <><div className="stat-grid"><Stat icon={<KeyRound/>} label="Total Licenses" value={stats.total} sub="fleet size"/><Stat icon={<Zap/>} label="Active" value={stats.active} sub="authorized"/><Stat icon={<Server/>} label="Servers" value={stats.servers} sub="observed"/><Stat icon={<Users/>} label="Players" value={stats.players} sub="current telemetry"/></div><div className="dashboard-grid"><section className="panel"><div className="panel-head"><div><h2>License Creation Trend</h2><p>Operational volume</p></div></div><div className="chart tall"><ResponsiveContainer width="100%" height="100%"><AreaChart data={chart}><XAxis dataKey="name" stroke="#64748b"/><YAxis stroke="#64748b"/><Tooltip contentStyle={{background:'#0b1426',border:'1px solid #22304a'}}/><Area type="monotone" dataKey="licenses" stroke="#6db2ff" fill="#6db2ff" fillOpacity={.15}/></AreaChart></ResponsiveContainer></div></section><section className="panel"><div className="panel-head"><div><h2>Product Intelligence</h2><p>{products.length} products observed</p></div></div><div className="product-list">{products.map(p=><div key={p}><Package size={16}/><b>{p}</b><span>{licenses.filter(x=>x.product===p).length} licenses</span></div>)}{!products.length&&<div className="empty-card">No product data.</div>}</div></section></div></>}
+function OperationsSection({stats,onGoto,onCreate}:{stats:any;onGoto:(t:Tab)=>void;onCreate:()=>void}){const cards=[['License Lifecycle','Create, extend, revoke, archive and recover licenses.',KeyRound,onCreate],['Map Intelligence','Universe, place, server and installation topology.',Map,()=>onGoto('maps')],['Security Response','Investigate threats, replay signals and denied events.',ShieldAlert,()=>onGoto('security')],['Observability','Metrics, telemetry, audit and system health.',Gauge,()=>onGoto('analytics')],['Developer Platform','API, webhooks, documentation and integration contracts.',Webhook,()=>{}],['Disaster Recovery','Backup, recovery, key rotation and continuity procedures.',Database,()=>{}]];return <><section className="panel"><div className="panel-head"><div><p className="eyebrow">OPERATIONS COMMAND</p><h2>AAA Control Plane</h2><p>Operational modules are surfaced here; privileged destructive actions remain server-side and permission-gated.</p></div></div><div className="ops-grid">{cards.map(([a,b,I,fn]:any)=><button key={a} onClick={fn}><I size={22}/><b>{a}</b><span>{b}</span><small>OPEN MODULE →</small></button>)}</div></section><section className="panel"><div className="panel-head"><div><h2>Control Plane Principles</h2><p>Zero-trust execution chain.</p></div></div><div className="flow"><span>AUTH</span><i>→</i><span>ROLE</span><i>→</i><span>PERMISSION</span><i>→</i><span>VALIDATION</span><i>→</i><span>ACTION</span><i>→</i><span>AUDIT</span></div></section></>}
+function AuditSection({audits}:{audits:AuditRow[]}){return <section className="panel"><div className="panel-head"><div><p className="eyebrow">TRACEABILITY</p><h2>Audit Timeline</h2><p>Administrative and security actions recorded by the current backend.</p></div></div><div className="timeline">{audits.map(a=><article key={a.id}><span className="timeline-dot"/><div><b>{a.action}</b><small>{a.target_type||'system'} · {a.target_id||'—'} · {a.actor_label||'admin'}</small><time>{fmt(a.created_at)}</time></div></article>)}{!audits.length&&<div className="empty-card"><FileSearch size={30}/><b>No audit records.</b></div>}</div></section>}
+function SettingsSection({stats}:{stats:any}){const items=[['Environment','PRODUCTION'],['Signature','Ed25519 · ed25519-v1'],['Data Plane','Supabase'],['API Mode','Server-side'],['Session','Admin bearer session'],['Telemetry','Roblox LicenseClient'],['Architecture','Zero Trust / RBAC ready'],['Release',RELEASE]];return <><section className="panel"><div className="panel-head"><div><p className="eyebrow">PLATFORM CONFIGURATION</p><h2>System Settings</h2><p>Safe operational metadata. Secrets and private keys are never rendered here.</p></div></div><div className="settings-grid">{items.map(([a,b])=><article key={a}><span>{a}</span><b>{b}</b></article>)}</div></section><section className="panel"><div className="panel-head"><div><h2>AAA Readiness Matrix</h2><p>UI and operational surfaces now prepared for progressive backend enablement.</p></div></div><div className="readiness">{['Mission Control','License Studio','Roblox Maps','Server Telemetry','Security Center','Analytics','Command Palette','Audit','Settings','API / Webhooks','RBAC','Disaster Recovery'].map(x=><span key={x}><CheckCircle2 size={14}/>{x}</span>)}</div></section></>}
+function Stat({icon,label,value,sub,danger=false}:{icon:React.ReactNode;label:string;value:number;sub:string;danger?:boolean}){return <article className={`stat-card ${danger?'danger':''}`}><div className="stat-icon">{icon}</div><div><span>{label}</span><strong>{value}</strong><small>{sub}</small></div></article>}
+function Field({label,children,wide=false}:{label:string;children:React.ReactNode;wide?:boolean}){return <label className={wide?'field wide':'field'}><span>{label}</span>{children}</label>}
+function EmptyRow({cols,text}:{cols:number;text:string}){return <tr><td colSpan={cols}><div className="empty"><Activity size={25}/><b>{text}</b><span>Data will appear when telemetry is available.</span></div></td></tr>}
+function RobloxId({id,kind}:{id?:string|null;kind:'place'|'universe'}){if(!id)return <>—</>;const href=kind==='place'?`https://www.roblox.com/games/${id}`:`https://create.roblox.com/dashboard/creations/experiences/${id}/overview`;return <a className="id-link" href={href} target="_blank" rel="noreferrer">{id}</a>}
+function LicenseTable({rows,loading,onDetail,onEdit,onDelete,readonly=false}:{rows:LicenseRow[];loading:boolean;onDetail:(r:LicenseRow)=>void;onEdit:(r:LicenseRow)=>void;onDelete:(r:LicenseRow)=>void;readonly?:boolean}){return <div className="table-wrap"><table><thead><tr><th>Owner</th><th>Product</th><th>Status</th><th>Universe</th><th>Installation</th><th>Heartbeat</th>{!readonly&&<th>Actions</th>}</tr></thead><tbody>{rows.map(r=><tr key={`${r.owner_id}:${r.owner_type}:${r.product}`}><td><b>{r.owner_id}</b><small>{r.owner_type}</small></td><td><b>{r.product}</b><small>{fmt(r.created_at)}</small></td><td><span className={`status ${r.status}`}>{statusLabel[r.status]}</span></td><td><RobloxId id={r.universe_id} kind="universe"/></td><td><b>{r.game_name||r.place_name||'Not connected'}</b><small><RobloxId id={r.place_id} kind="place"/></small></td><td>{fmt(r.last_seen_at)}</td>{!readonly&&<td><div className="row-actions"><button onClick={()=>onDetail(r)} title="Inspect"><Eye size={15}/></button><button onClick={()=>onEdit(r)} title="Edit"><Pencil size={15}/></button><button className="danger-action" onClick={()=>onDelete(r)} title="Delete"><Trash2 size={15}/></button></div></td>}</tr>)}{!rows.length&&!loading&&<EmptyRow cols={readonly?6:7} text="Belum ada license."/>}{loading&&<tr><td colSpan={readonly?6:7}><div className="empty"><Loader2 className="spin"/><b>Loading telemetry…</b></div></td></tr>}</tbody></table></div>}
+function DetailDrawer({detail,installations,onClose,onEdit}:{detail:LicenseRow;installations:LicenseRow[];onClose:()=>void;onEdit:()=>void}){return <div className="drawer-backdrop" onMouseDown={e=>e.target===e.currentTarget&&onClose()}><aside className="detail-drawer"><div className="drawer-head"><div><p className="eyebrow">LICENSE DIGITAL TWIN</p><h2>{detail.owner_id}</h2><span>{detail.product}</span></div><button className="icon-button" onClick={onClose}><X size={18}/></button></div><div className="drawer-status"><span className={`status ${detail.status}`}>{statusLabel[detail.status]}</span><b>{detail.expires_at?fmt(detail.expires_at):'Lifetime / no expiry'}</b></div><div className="drawer-grid"><article><span>Owner</span><b>{detail.owner_type} {detail.owner_id}</b></article><article><span>Universe</span><b>{detail.universe_id||'Unbound'}</b></article><article><span>Installations</span><b>{installations.length}</b></article><article><span>Players</span><b>{installations.reduce((n,x)=>n+(x.player_count||0),0)}</b></article></div><h3>Relationship Graph</h3><div className="relationship"><span>OWNER</span><i>↓</i><span>LICENSE</span><i>↓</i><span>UNIVERSE</span><i>↓</i><span>PLACE / SERVER</span></div><h3>Installation Timeline</h3><div className="drawer-list">{installations.map((x,i)=><div key={i}><Radio size={14}/><span><b>{x.game_name||x.place_name||'Unknown'}</b><small>{x.place_id||'—'} · {fmt(x.last_seen_at)}</small></span></div>)}{!installations.length&&<small>No installations recorded.</small>}</div><div className="drawer-actions"><button className="secondary-button" onClick={onEdit}><Pencil size={15}/> Edit</button><button className="primary-button" onClick={onClose}>Close</button></div></aside></div>}
