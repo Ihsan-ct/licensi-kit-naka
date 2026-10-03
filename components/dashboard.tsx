@@ -75,6 +75,8 @@ function generateKey() {
   return `NAKA-${raw.slice(0, 8)}-${raw.slice(8, 16)}-${raw.slice(16, 24)}-${raw.slice(24, 32)}`;
 }
 
+const NAKA_CLOUD_RELEASE = '3.0.0 Global';
+
 export default function Dashboard() {
   const [secret, setSecret] = useState('');
   const [token, setToken] = useState('');
@@ -326,7 +328,7 @@ export default function Dashboard() {
 
       <section className="workspace">
         <header className="topbar">
-          <div><p className="eyebrow">CONTROL CENTER</p><h1>{tabTitle[tab]}</h1></div>
+          <div><p className="eyebrow">CONTROL CENTER · {NAKA_CLOUD_RELEASE.toUpperCase()}</p><h1>{tabTitle[tab]}</h1></div>
           <div className="topbar-actions">
             <button className="icon-button" onClick={loadData} disabled={loading} title="Muat ulang"><RefreshCw className={loading ? 'spin' : ''} size={18} /></button>
             <div className="action-menu">
