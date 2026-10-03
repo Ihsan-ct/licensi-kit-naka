@@ -42,6 +42,52 @@ async function sha256(text) {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+const LICENSE_SIGNATURE_VERSION = 'ed25519-v1';
+const LICENSE_PRIVATE_KEY_ENV = 'LICENSE_ED25519_PRIVATE_KEY_B64';
+
+function canonicalLicensePayload(payload) {
+  return [
+    String(payload.signatureVersion || ''),
+    payload.valid === true ? '1' : '0',
+    String(payload.ownerId || ''),
+    String(payload.ownerType || ''),
+    String(payload.product || ''),
+    String(payload.universeId || ''),
+    String(payload.status || ''),
+    String(payload.issuedAt || ''),
+    String(payload.expiresAt || ''),
+    String(payload.requestNonce || '')
+  ].join('|');
+}
+
+function loadEd25519PrivateKey() {
+  const encoded = String(process.env[LICENSE_PRIVATE_KEY_ENV] || '').trim();
+  if (!encoded) throw new Error(LICENSE_PRIVATE_KEY_ENV + ' belum dikonfigurasi');
+  const der = Buffer.from(encoded, 'base64');
+  if (der.length < 32) throw new Error(LICENSE_PRIVATE_KEY_ENV + ' tidak valid');
+  return createPrivateKey({ key: der, format: 'der', type: 'pkcs8' });
+}
+
+function signLicensePayload(payload) {
+  return sign(null, Buffer.from(canonicalLicensePayload(payload), 'utf8'), loadEd25519PrivateKey()).toString('hex');
+}
+
+function signedLicenseResponse({ ownerId, ownerType, product, universeId, status, valid, expiresAt, requestNonce, message }) {
+  const payload = {
+    valid: valid === true,
+    signatureVersion: LICENSE_SIGNATURE_VERSION,
+    ownerId: ownerId || null,
+    ownerType: ownerType || null,
+    product: product || null,
+    universeId: universeId || null,
+    status: status || (valid ? 'active' : 'invalid'),
+    issuedAt: new Date().toISOString(),
+    expiresAt: expiresAt || null,
+    requestNonce: requestNonce || ''
+  };
+  return { ...payload, signature: signLicensePayload(payload), serverTime: new Date().toISOString(), ...(message ? { message } : {}) };
+}
+
 async function supabaseFetch(url, key, path, options = {}) {
   const response = await fetch(`${url}/rest/v1/${path}`, {
     ...options,
@@ -110,6 +156,7 @@ export default async function handler(req, res) {
   const placeId = positiveId(body.placeId);
   const universeId = positiveId(body.universeId);
   const licenseKey = cleanString(body.licenseKey, 200);
+  const requestNonce = cleanString(body.requestNonce, 100);
   const metadata = {
     placeName: cleanString(body.placeName, 100),
     gameName: cleanString(body.gameName, 100),
@@ -146,7 +193,7 @@ export default async function handler(req, res) {
 
     if (!item) {
       await logAttempt({ url: SUPABASE_URL, key: SUPABASE_KEY }, { ...attemptBase, reason: 'license_not_found' });
-      return res.status(200).json({ valid: false, message: 'Lisensi tidak terdaftar' });
+      return res.status(200).json(signedLicenseResponse({ ownerId, ownerType, product, universeId, status: 'not_found', valid: false, requestNonce, message: 'Lisensi tidak terdaftar' }));
     }
 
     // Dashboard approval is the primary authorization path. Keep optional
@@ -155,19 +202,19 @@ export default async function handler(req, res) {
       const keyHash = await sha256(licenseKey);
       if (keyHash !== item.license_key_hash) {
         await logAttempt({ url: SUPABASE_URL, key: SUPABASE_KEY }, { ...attemptBase, reason: 'invalid_license_key' });
-        return res.status(200).json({ valid: false, message: 'License key tidak cocok' });
+        return res.status(200).json(signedLicenseResponse({ ownerId, ownerType, product, universeId, status: 'invalid_key', valid: false, expiresAt: item.expires_at || null, requestNonce, message: 'License key tidak cocok' }));
       }
     }
 
     const status = cleanString(item.status, 20)?.toLowerCase();
     if (status !== 'active') {
       await logAttempt({ url: SUPABASE_URL, key: SUPABASE_KEY }, { ...attemptBase, reason: `license_${status || 'inactive'}` });
-      return res.status(200).json({ valid: false, message: 'Lisensi tidak aktif' });
+      return res.status(200).json(signedLicenseResponse({ ownerId, ownerType, product, universeId, status: status || 'inactive', valid: false, expiresAt: item.expires_at || null, requestNonce, message: 'Lisensi tidak aktif' }));
     }
 
     if (item.expires_at && new Date(item.expires_at).getTime() <= Date.now()) {
       await logAttempt({ url: SUPABASE_URL, key: SUPABASE_KEY }, { ...attemptBase, reason: 'license_expired' });
-      return res.status(200).json({ valid: false, message: 'Lisensi telah kedaluwarsa' });
+      return res.status(200).json(signedLicenseResponse({ ownerId, ownerType, product, universeId, status: 'expired', valid: false, expiresAt: item.expires_at || null, requestNonce, message: 'Lisensi telah kedaluwarsa' }));
     }
 
     // Universe and place are telemetry only. Authorization is intentionally
@@ -194,16 +241,16 @@ export default async function handler(req, res) {
       })
     });
 
-    return res.status(200).json({
-      valid: true,
+    return res.status(200).json(signedLicenseResponse({
       ownerId,
       ownerType,
       product,
       universeId,
       status: 'active',
+      valid: true,
       expiresAt: item.expires_at || null,
-      serverTime: new Date().toISOString()
-    });
+      requestNonce
+    }));
   } catch (error) {
     const detail = String(error?.message || 'Unknown error').slice(0, 300);
     console.error('[verify] error:', detail);
